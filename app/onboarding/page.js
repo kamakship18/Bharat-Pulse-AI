@@ -6,6 +6,7 @@ import { StepForm } from "@/components/StepForm";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Sparkles, Shield, Zap, Globe } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export default function OnboardingPage() {
   return (
@@ -14,9 +15,7 @@ export default function OnboardingPage() {
       <header className="border-b border-white/30 glass-strong">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary via-indigo-600 to-violet-700 text-xs font-bold text-white shadow-md">
-              BP
-            </span>
+            <BrandLogo size="sm" />
             <span className="font-heading font-bold">BharatPulse</span>
           </Link>
           <Link

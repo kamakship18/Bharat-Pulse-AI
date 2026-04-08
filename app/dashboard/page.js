@@ -29,6 +29,7 @@ import {
   Brain,
   ArrowRight,
 } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 
 const defaultProfile = {
   businessName: "Your business",
@@ -101,11 +102,8 @@ export default function DashboardPage() {
       <header className="sticky top-0 z-40 border-b border-white/30 glass-strong">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
           <div className="flex items-center gap-3">
-            <Link
-              href="/"
-              className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary via-indigo-600 to-violet-700 text-xs font-bold text-white shadow-md"
-            >
-              BP
+            <Link href="/" className="flex shrink-0 items-center">
+              <BrandLogo size="md" />
             </Link>
             <div>
               <h1 className="font-heading text-lg font-bold leading-none">

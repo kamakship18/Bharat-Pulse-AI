@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export function Footer() {
   return (
@@ -8,10 +9,8 @@ export function Footer() {
     >
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-8 px-4 text-center sm:flex-row sm:text-left sm:px-6">
         <div>
-          <div className="flex items-center justify-center gap-2.5 sm:justify-start">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary via-indigo-600 to-violet-700 text-xs font-bold text-white shadow-md">
-              BP
-            </span>
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:justify-start">
+            <BrandLogo size="lg" />
             <span className="font-heading text-lg font-bold">BharatPulse AI</span>
           </div>
           <p className="mt-3 max-w-sm text-sm leading-relaxed text-muted-foreground">

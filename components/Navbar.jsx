@@ -4,6 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/BrandLogo";
 import { Zap } from "lucide-react";
 
 const links = [
@@ -22,10 +23,12 @@ export function Navbar() {
       transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
     >
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-        <Link href="/" className="flex items-center gap-2.5 group">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary via-indigo-600 to-violet-700 text-sm font-bold text-white shadow-md transition-transform duration-200 group-hover:scale-105">
-            BP
-          </span>
+        <Link href="/" className="group flex items-center gap-3">
+          <BrandLogo
+            size="md"
+            priority
+            className="transition-transform duration-200 group-hover:scale-[1.02]"
+          />
           <span className="font-heading text-lg font-bold tracking-tight text-foreground">
             BharatPulse
           </span>

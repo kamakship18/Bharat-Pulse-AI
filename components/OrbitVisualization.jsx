@@ -10,8 +10,8 @@ import {
   Lightbulb,
   GitBranch,
   Camera,
-  Brain,
 } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 
 /* ── Node configuration ── */
 const ORBIT_NODES = [
@@ -239,18 +239,17 @@ export function OrbitVisualization({ className }) {
         {/* Core circle */}
         <motion.div
           className={cn(
-            "relative flex h-28 w-28 flex-col items-center justify-center rounded-full",
+            "relative flex h-28 w-28 flex-col items-center justify-center overflow-hidden rounded-full px-1 pt-1",
             "border border-white/60 bg-white/85 shadow-2xl backdrop-blur-xl",
             "ring-2 ring-primary/15"
           )}
           animate={{ scale: [1, 1.03, 1] }}
           transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
         >
-          <Brain className="mb-1 size-7 text-primary" strokeWidth={1.5} />
-          <span className="text-[9px] font-extrabold uppercase tracking-widest text-primary">
-            BharatPulse
+          <BrandLogo size="orbit" className="object-contain object-center" />
+          <span className="mt-0.5 text-[7px] font-bold leading-tight text-muted-foreground">
+            AI Engine
           </span>
-          <span className="text-[8px] font-bold text-muted-foreground">AI Engine</span>
         </motion.div>
 
         {/* Connector lines radiating from center to ring 1 */}
