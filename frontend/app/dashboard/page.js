@@ -17,18 +17,28 @@ import {
   categoryBreakdown,
   demoAlerts,
   demoRecommendations,
+  demandTrending,
+  branchComparison,
+  stockHealth,
   STORAGE_KEY,
 } from "@/lib/mock-data";
 import {
-  FileSpreadsheet,
-  ImageIcon,
   LayoutDashboard,
   Sparkles,
-  Zap,
   Upload,
   Brain,
   ArrowRight,
   Database,
+  Plus,
+  TrendingUp,
+  Package,
+  AlertTriangle,
+  Clock,
+  CheckCircle2,
+  MapPin,
+  BarChart3,
+  ShieldAlert,
+  Activity,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 
@@ -46,6 +56,147 @@ const defaultProfile = {
   },
 };
 
+/* ─── Stock Health Card ─── */
+function StockHealthPanel() {
+  const items = [
+    { label: "Total Products", value: stockHealth.totalProducts, icon: Package, color: "text-primary", bg: "bg-primary/5" },
+    { label: "Expiring Soon", value: stockHealth.expiringItems, icon: Clock, color: "text-red-600", bg: "bg-red-50" },
+    { label: "Low Stock", value: stockHealth.lowStockItems, icon: AlertTriangle, color: "text-amber-600", bg: "bg-amber-50" },
+    { label: "Healthy", value: stockHealth.healthyItems, icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-50" },
+  ];
+
+  return (
+    <Card className="overflow-hidden rounded-2xl border-white/50 bg-white/70 shadow-lg backdrop-blur-md">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-sm font-bold">
+          <Activity className="size-4 text-primary" />
+          Stock Health Overview
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {items.map((item) => {
+            const Icon = item.icon;
+            return (
+              <div key={item.label} className={`rounded-xl ${item.bg} p-3.5 transition-all hover:shadow-md`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{item.label}</p>
+                    <p className={`mt-1 text-2xl font-extrabold ${item.color}`}>{item.value}</p>
+                  </div>
+                  <Icon className={`size-5 ${item.color} opacity-60`} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {/* Value bar */}
+        <div className="mt-4 flex items-center gap-3 rounded-xl bg-gradient-to-r from-primary/5 to-violet-500/5 px-4 py-3">
+          <BarChart3 className="size-4 text-primary" />
+          <div>
+            <p className="text-xs font-bold text-primary">Total Inventory Value</p>
+            <p className="text-lg font-extrabold text-foreground">{stockHealth.totalValue}</p>
+          </div>
+          <div className="ml-auto text-right">
+            <p className="text-xs font-bold text-muted-foreground">{stockHealth.totalUnits} units</p>
+            <p className="text-[10px] text-muted-foreground">across 3 branches</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ─── Branch Comparison ─── */
+function BranchComparisonPanel() {
+  const riskColors = {
+    red: { bg: "bg-red-50", text: "text-red-600", border: "border-red-200/40" },
+    amber: { bg: "bg-amber-50", text: "text-amber-600", border: "border-amber-200/40" },
+    green: { bg: "bg-emerald-50", text: "text-emerald-600", border: "border-emerald-200/40" },
+  };
+
+  return (
+    <Card className="overflow-hidden rounded-2xl border-white/50 bg-white/70 shadow-lg backdrop-blur-md">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-sm font-bold">
+          <MapPin className="size-4 text-primary" />
+          Branch Comparison
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {branchComparison.map((b) => {
+          const rc = riskColors[b.riskColor];
+          return (
+            <div
+              key={b.branch}
+              className={`rounded-xl border ${rc.border} ${rc.bg}/30 bg-white/70 p-4 transition-all hover:shadow-md hover:-translate-y-0.5`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <MapPin className={`size-3.5 ${rc.text}`} />
+                  <span className="text-sm font-bold">{b.branch}</span>
+                </div>
+                <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${rc.bg} ${rc.text}`}>
+                  {b.riskScore} Risk
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Stock</p>
+                  <p className="text-sm font-bold">{b.totalStock}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Expiring</p>
+                  <p className={`text-sm font-bold ${b.expiringItems > 0 ? "text-red-600" : "text-emerald-600"}`}>{b.expiringItems}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Revenue</p>
+                  <p className="text-sm font-bold text-primary">{b.revenue}</p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ─── Demand Trending ─── */
+function DemandTrendingPanel() {
+  return (
+    <Card className="overflow-hidden rounded-2xl border-white/50 bg-white/70 shadow-lg backdrop-blur-md">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-sm font-bold">
+          <TrendingUp className="size-4 text-primary" />
+          Trending Demand
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2.5">
+        {demandTrending.map((item, i) => (
+          <motion.div
+            key={item.product}
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.08 }}
+            className="flex items-center gap-3 rounded-xl bg-white/60 border border-border/20 px-3.5 py-2.5 transition-all hover:bg-white/90 hover:shadow-sm"
+          >
+            <span className="text-lg">{item.icon}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold truncate">{item.product}</p>
+              <p className="text-[10px] text-muted-foreground">{item.reason}</p>
+            </div>
+            <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-600">
+              {item.demand}
+            </span>
+          </motion.div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ─── Main Dashboard ─── */
 export default function DashboardPage() {
   const [hasData, setHasData] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -65,6 +216,13 @@ export default function DashboardPage() {
     } catch {
       /* ignore */
     }
+    // Check if any uploads exist
+    try {
+      const uploads = sessionStorage.getItem("bharat-pulse-uploads");
+      if (uploads && JSON.parse(uploads).length > 0) {
+        setHasData(true);
+      }
+    } catch {}
   }, []);
 
   const charts = useMemo(
@@ -78,7 +236,7 @@ export default function DashboardPage() {
         />
         <ChartCard
           title="Stock by branch"
-          description="Units on hand"
+          description="Units on hand (with risk)"
           type="bar"
           data={stockByBranch}
         />
@@ -126,20 +284,11 @@ export default function DashboardPage() {
             </Link>
             <Button
               type="button"
-              variant="outline"
-              className="rounded-full bg-white/70 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:shadow-md"
-              onClick={() => setModalOpen(true)}
-            >
-              <FileSpreadsheet className="mr-2 size-4" />
-              Upload Data
-            </Button>
-            <Button
-              type="button"
               className="btn-glow rounded-full shadow-md"
               onClick={() => setModalOpen(true)}
             >
-              <ImageIcon className="mr-2 size-4" />
-              Upload Images
+              <Plus className="mr-2 size-4" />
+              Add Data
             </Button>
           </div>
         </div>
@@ -207,7 +356,7 @@ export default function DashboardPage() {
                   No data uploaded yet
                 </CardTitle>
                 <p className="mt-3 max-w-md text-base text-muted-foreground">
-                  Connect a sheet or drop ledger images — we&apos;ll populate alerts,
+                  Connect a Google Sheet, upload images, or capture your ledger — we&apos;ll populate alerts,
                   charts, and AI recommendations instantly.
                 </p>
                 <div className="mt-10 flex flex-wrap justify-center gap-4">
@@ -216,8 +365,8 @@ export default function DashboardPage() {
                     className="btn-glow rounded-full px-8 py-3 text-base font-semibold shadow-lg"
                     onClick={() => setModalOpen(true)}
                   >
-                    <Sparkles className="mr-2 size-4" />
-                    Upload to see insights
+                    <Plus className="mr-2 size-4" />
+                    Add data to see insights
                   </Button>
                   <Link
                     href="/onboarding"
@@ -234,7 +383,16 @@ export default function DashboardPage() {
             </Card>
           ) : (
             <>
-              {/* ─── ALERTS + RECOMMENDATIONS (TOP — most important) ─── */}
+              {/* ─── STOCK HEALTH OVERVIEW ─── */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1, duration: 0.4 }}
+              >
+                <StockHealthPanel />
+              </motion.div>
+
+              {/* ─── ALERTS + RECOMMENDATIONS ─── */}
               <motion.div
                 className="grid gap-6 lg:grid-cols-2"
                 initial={{ opacity: 0, y: 16 }}
@@ -250,7 +408,7 @@ export default function DashboardPage() {
                 className="flex items-center gap-3 rounded-2xl bg-gradient-to-r from-indigo-50 via-violet-50 to-purple-50 border border-primary/10 px-5 py-4 shadow-sm"
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.25, duration: 0.4 }}
+                transition={{ delay: 0.2, duration: 0.4 }}
               >
                 <Brain className="size-5 text-primary animate-ai-pulse" />
                 <div className="flex-1">
@@ -262,6 +420,17 @@ export default function DashboardPage() {
                 <Button variant="outline" size="sm" className="rounded-full text-xs bg-white/80 hover:bg-white">
                   View Details
                 </Button>
+              </motion.div>
+
+              {/* ─── BRANCH COMPARISON + DEMAND TRENDING ─── */}
+              <motion.div
+                className="grid gap-6 lg:grid-cols-2"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25, duration: 0.4 }}
+              >
+                <BranchComparisonPanel />
+                <DemandTrendingPanel />
               </motion.div>
 
               {/* ─── Charts ─── */}

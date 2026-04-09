@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { BrandLogo } from "@/components/BrandLogo";
+import { UploadModal, UPLOAD_STORAGE_KEY, getStoredUploads } from "@/components/UploadModal";
 import {
   productInventory,
   BRANCH_OPTIONS,
@@ -34,9 +36,17 @@ import {
   Bot,
   User,
   Sparkles,
-  BarChart3,
   MapPin,
   Search,
+  Plus,
+  Link2,
+  Camera,
+  ImageIcon,
+  FileSpreadsheet,
+  Trash2,
+  Eye,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 /* ─── Status helpers ─── */
@@ -135,6 +145,123 @@ function ProductCard({ product, index }) {
   );
 }
 
+/* ─── Upload Sources Panel ─── */
+
+function UploadSourcesPanel({ uploads, onAddMore }) {
+  const [expandedBranch, setExpandedBranch] = useState(null);
+
+  // Group by branch
+  const grouped = useMemo(() => {
+    const map = {};
+    uploads.forEach((u) => {
+      if (!map[u.branch]) map[u.branch] = [];
+      map[u.branch].push(u);
+    });
+    return map;
+  }, [uploads]);
+
+  const typeIcons = {
+    sheet: { icon: Link2, color: "text-primary", bg: "bg-primary/10", label: "Google Sheet" },
+    image: { icon: ImageIcon, color: "text-violet-600", bg: "bg-violet-500/10", label: "Image Upload" },
+    camera: { icon: Camera, color: "text-emerald-600", bg: "bg-emerald-500/10", label: "Camera Capture" },
+  };
+
+  if (uploads.length === 0) {
+    return (
+      <Card className="overflow-hidden rounded-2xl border-white/50 bg-white/70 shadow-lg backdrop-blur-md">
+        <CardContent className="flex flex-col items-center justify-center py-10 text-center">
+          <Database className="size-10 text-muted-foreground/30 mb-3" />
+          <p className="text-sm font-semibold text-muted-foreground">No uploads yet</p>
+          <p className="text-xs text-muted-foreground/70 mt-1 mb-4">
+            Add data from Google Sheets, images, or camera
+          </p>
+          <Button className="rounded-full btn-glow" onClick={onAddMore}>
+            <Plus className="mr-2 size-4" />
+            Add Data
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="overflow-hidden rounded-2xl border-white/50 bg-white/70 shadow-lg backdrop-blur-md">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm font-bold">
+            <Database className="size-4 text-primary" />
+            Uploaded Sources
+          </CardTitle>
+          <Button size="sm" className="rounded-full h-7 text-xs" onClick={onAddMore}>
+            <Plus className="mr-1.5 size-3" />
+            Add More
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {Object.entries(grouped).map(([branch, items]) => (
+          <div key={branch} className="rounded-xl border border-border/30 overflow-hidden">
+            <button
+              onClick={() => setExpandedBranch(expandedBranch === branch ? null : branch)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-white/50 hover:bg-white/80 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <MapPin className="size-3.5 text-primary" />
+                <span className="text-xs font-bold">{branch}</span>
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                  {items.length} upload{items.length > 1 ? "s" : ""}
+                </span>
+              </div>
+              {expandedBranch === branch ? (
+                <ChevronUp className="size-3.5 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="size-3.5 text-muted-foreground" />
+              )}
+            </button>
+
+            <AnimatePresence>
+              {expandedBranch === branch && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="divide-y divide-border/20 border-t border-border/20">
+                    {items.map((upload) => {
+                      const typeConfig = typeIcons[upload.type] || typeIcons.sheet;
+                      const TypeIcon = typeConfig.icon;
+                      return (
+                        <div key={upload.id} className="flex items-center gap-3 px-4 py-2.5">
+                          <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${typeConfig.bg}`}>
+                            <TypeIcon className={`size-3.5 ${typeConfig.color}`} />
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase">{typeConfig.label}</p>
+                            <p className="text-xs truncate">{upload.source || "—"}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-[10px] font-bold text-primary">
+                              {upload.extractedData?.length || 0} items
+                            </p>
+                            <p className="text-[9px] text-muted-foreground">
+                              {new Date(upload.timestamp).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 /* ─── AI Chat Panel ─── */
 
 function AIChatPanel() {
@@ -158,11 +285,9 @@ function AIChatPanel() {
     setInput("");
     setIsTyping(true);
 
-    // Find matching demo response or cycle through
     const idx = demoIndexRef.current;
     const nextPair = [];
 
-    // Find next user+assistant pair from demo data
     for (let i = idx; i < aiChatMessages.length; i++) {
       if (aiChatMessages[i].role === "assistant") {
         nextPair.push(aiChatMessages[i]);
@@ -171,14 +296,13 @@ function AIChatPanel() {
       }
     }
 
-    // If we ran out of demo messages, use a generic smart response
     if (nextPair.length === 0) {
       nextPair.push({
         id: `ai-${Date.now()}`,
         role: "assistant",
         text: `📊 Based on your current data:\n\n• Total inventory value: **₹42,580** across 3 branches\n• **5 items** need attention this week\n• Rajpura branch has the most critical alerts\n\n💡 *Would you like me to generate a detailed report?*`,
       });
-      demoIndexRef.current = 1; // Reset cycle
+      demoIndexRef.current = 1;
     }
 
     setTimeout(() => {
@@ -195,7 +319,6 @@ function AIChatPanel() {
 
   return (
     <Card className="flex h-full flex-col overflow-hidden rounded-2xl border-white/50 bg-white/70 shadow-xl backdrop-blur-md">
-      {/* Chat Header */}
       <CardHeader className="shrink-0 border-b border-border/30 pb-3">
         <div className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-violet-600 shadow-md">
@@ -211,7 +334,6 @@ function AIChatPanel() {
         </div>
       </CardHeader>
 
-      {/* Messages Area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         <AnimatePresence mode="popLayout">
           {messages.map((msg) => (
@@ -256,13 +378,8 @@ function AIChatPanel() {
           ))}
         </AnimatePresence>
 
-        {/* Typing indicator */}
         {isTyping && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex gap-2.5"
-          >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-2.5">
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/15 to-violet-500/15 text-primary">
               <Sparkles className="size-3.5" />
             </div>
@@ -277,7 +394,6 @@ function AIChatPanel() {
         )}
       </div>
 
-      {/* Quick questions */}
       {messages.length <= 1 && (
         <div className="shrink-0 px-4 pb-2">
           <p className="text-[10px] font-medium text-muted-foreground mb-1.5">Try asking:</p>
@@ -295,7 +411,6 @@ function AIChatPanel() {
         </div>
       )}
 
-      {/* Input */}
       <div className="shrink-0 border-t border-border/30 p-3">
         <form
           onSubmit={(e) => { e.preventDefault(); handleSend(); }}
@@ -350,6 +465,14 @@ export default function ManageDataPage() {
   const [stockFilter, setStockFilter] = useState("All");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [uploads, setUploads] = useState([]);
+  const [activeTab, setActiveTab] = useState("inventory"); // inventory | sources
+
+  // Load uploads from sessionStorage
+  useEffect(() => {
+    setUploads(getStoredUploads());
+  }, [modalOpen]); // refresh when modal closes
 
   const filteredProducts = useMemo(() => {
     return productInventory.filter((p) => {
@@ -390,12 +513,18 @@ export default function ManageDataPage() {
               <p className="text-xs text-muted-foreground">BharatPulse AI</p>
             </div>
           </div>
-          <Link href="/dashboard">
-            <Button variant="outline" className="rounded-full bg-white/70 shadow-sm backdrop-blur-sm hover:bg-white hover:shadow-md">
-              <ArrowLeft className="mr-2 size-4" />
-              Dashboard
+          <div className="flex items-center gap-2">
+            <Button className="rounded-full btn-glow" onClick={() => setModalOpen(true)}>
+              <Plus className="mr-2 size-4" />
+              Add Data
             </Button>
-          </Link>
+            <Link href="/dashboard">
+              <Button variant="outline" className="rounded-full bg-white/70 shadow-sm backdrop-blur-sm hover:bg-white hover:shadow-md">
+                <ArrowLeft className="mr-2 size-4" />
+                Dashboard
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -433,98 +562,128 @@ export default function ManageDataPage() {
             </div>
           </motion.div>
 
-          {/* Summary Cards */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <SummaryCard icon={Package} label="Total Products" value={stats.total} color="text-primary" bg="bg-primary/5" />
-            <SummaryCard icon={Clock} label="Expiring Soon" value={stats.expiring} color="text-red-600" bg="bg-red-50" />
-            <SummaryCard icon={AlertTriangle} label="Low Stock" value={stats.lowStock} color="text-amber-600" bg="bg-amber-50" />
-            <SummaryCard icon={CheckCircle2} label="Healthy" value={stats.healthy} color="text-emerald-600" bg="bg-emerald-50" />
-          </div>
-
-          {/* Filters */}
-          <Card className="overflow-hidden rounded-2xl border-white/50 bg-white/70 shadow-lg backdrop-blur-md">
-            <CardContent className="p-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
-                  <Filter className="size-3.5" />
-                  Filters
-                </div>
-                <Separator orientation="vertical" className="h-5" />
-
-                {/* Search */}
-                <div className="relative flex-1 min-w-[180px]">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-                  <Input
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search products..."
-                    className="h-8 rounded-lg bg-white/80 pl-8 text-xs shadow-sm"
-                  />
-                </div>
-
-                {/* Stock Filter */}
-                <Select value={stockFilter} onValueChange={setStockFilter}>
-                  <SelectTrigger className="h-8 w-36 rounded-lg bg-white/80 text-xs shadow-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STOCK_FILTERS.map((f) => (
-                      <SelectItem key={f} value={f}>{f}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {/* Category Filter */}
-                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                  <SelectTrigger className="h-8 w-36 rounded-lg bg-white/80 text-xs shadow-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CATEGORY_FILTERS.map((f) => (
-                      <SelectItem key={f} value={f}>{f}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Product Grid */}
-          <div>
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs font-bold text-muted-foreground">
-                {filteredProducts.length} product{filteredProducts.length !== 1 ? "s" : ""} found
-              </p>
-              {(stockFilter !== "All" || categoryFilter !== "All" || searchQuery) && (
+          {/* Tab Switcher */}
+          <div className="flex gap-1 rounded-xl bg-white/50 p-1 border border-border/30 w-fit">
+            {[
+              { id: "inventory", label: "Inventory", icon: Package },
+              { id: "sources", label: "Upload Sources", icon: Database },
+            ].map((tab) => {
+              const TabIcon = tab.icon;
+              return (
                 <button
-                  onClick={() => { setStockFilter("All"); setCategoryFilter("All"); setSearchQuery(""); }}
-                  className="text-xs font-medium text-primary hover:underline cursor-pointer"
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold transition-all cursor-pointer",
+                    activeTab === tab.id
+                      ? "bg-white shadow-sm text-primary"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
                 >
-                  Clear filters
+                  <TabIcon className="size-3.5" />
+                  {tab.label}
                 </button>
-              )}
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <AnimatePresence mode="popLayout">
-                {filteredProducts.map((product, index) => (
-                  <ProductCard key={product.id} product={product} index={index} />
-                ))}
-              </AnimatePresence>
-            </div>
-
-            {filteredProducts.length === 0 && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex flex-col items-center justify-center py-16 text-center"
-              >
-                <Package className="size-12 text-muted-foreground/30 mb-3" />
-                <p className="text-sm font-semibold text-muted-foreground">No products match your filters</p>
-                <p className="text-xs text-muted-foreground/70 mt-1">Try adjusting your search or filters</p>
-              </motion.div>
-            )}
+              );
+            })}
           </div>
+
+          {activeTab === "inventory" && (
+            <>
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <SummaryCard icon={Package} label="Total Products" value={stats.total} color="text-primary" bg="bg-primary/5" />
+                <SummaryCard icon={Clock} label="Expiring Soon" value={stats.expiring} color="text-red-600" bg="bg-red-50" />
+                <SummaryCard icon={AlertTriangle} label="Low Stock" value={stats.lowStock} color="text-amber-600" bg="bg-amber-50" />
+                <SummaryCard icon={CheckCircle2} label="Healthy" value={stats.healthy} color="text-emerald-600" bg="bg-emerald-50" />
+              </div>
+
+              {/* Filters */}
+              <Card className="overflow-hidden rounded-2xl border-white/50 bg-white/70 shadow-lg backdrop-blur-md">
+                <CardContent className="p-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+                      <Filter className="size-3.5" />
+                      Filters
+                    </div>
+                    <Separator orientation="vertical" className="h-5" />
+
+                    <div className="relative flex-1 min-w-[180px]">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                      <Input
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search products..."
+                        className="h-8 rounded-lg bg-white/80 pl-8 text-xs shadow-sm"
+                      />
+                    </div>
+
+                    <Select value={stockFilter} onValueChange={setStockFilter}>
+                      <SelectTrigger className="h-8 w-36 rounded-lg bg-white/80 text-xs shadow-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STOCK_FILTERS.map((f) => (
+                          <SelectItem key={f} value={f}>{f}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                      <SelectTrigger className="h-8 w-36 rounded-lg bg-white/80 text-xs shadow-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CATEGORY_FILTERS.map((f) => (
+                          <SelectItem key={f} value={f}>{f}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Product Grid */}
+              <div>
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-xs font-bold text-muted-foreground">
+                    {filteredProducts.length} product{filteredProducts.length !== 1 ? "s" : ""} found
+                  </p>
+                  {(stockFilter !== "All" || categoryFilter !== "All" || searchQuery) && (
+                    <button
+                      onClick={() => { setStockFilter("All"); setCategoryFilter("All"); setSearchQuery(""); }}
+                      className="text-xs font-medium text-primary hover:underline cursor-pointer"
+                    >
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <AnimatePresence mode="popLayout">
+                    {filteredProducts.map((product, index) => (
+                      <ProductCard key={product.id} product={product} index={index} />
+                    ))}
+                  </AnimatePresence>
+                </div>
+
+                {filteredProducts.length === 0 && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex flex-col items-center justify-center py-16 text-center"
+                  >
+                    <Package className="size-12 text-muted-foreground/30 mb-3" />
+                    <p className="text-sm font-semibold text-muted-foreground">No products match your filters</p>
+                    <p className="text-xs text-muted-foreground/70 mt-1">Try adjusting your search or filters</p>
+                  </motion.div>
+                )}
+              </div>
+            </>
+          )}
+
+          {activeTab === "sources" && (
+            <UploadSourcesPanel uploads={uploads} onAddMore={() => setModalOpen(true)} />
+          )}
         </div>
 
         {/* RIGHT — AI Chat */}
@@ -532,6 +691,15 @@ export default function ManageDataPage() {
           <AIChatPanel />
         </div>
       </div>
+
+      <UploadModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        onComplete={() => {
+          setUploads(getStoredUploads());
+          setModalOpen(false);
+        }}
+      />
     </div>
   );
 }
