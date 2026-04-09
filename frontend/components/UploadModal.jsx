@@ -220,7 +220,13 @@ export function UploadModal({ open, onOpenChange, onComplete, branches = [] }) {
 
   /* ─── Success → complete ─── */
   function handleDone() {
-    onComplete?.();
+    const uploadPayload = {
+      type: uploadType,
+      branch: selectedBranch,
+      source: uploadType === "sheet" ? sheetLink : uploadedImages.map((i) => i.name).join(", "),
+      extractedData,
+    };
+    onComplete?.(uploadPayload);
     resetState();
   }
 

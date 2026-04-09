@@ -6,10 +6,12 @@ const connectDB = require("./config/db");
 
 const sheetsRoute    = require("./routes/sheets");
 const inventoryRoute = require("./routes/inventory");
+const authRoute      = require("./routes/auth");
+const userRoute      = require("./routes/user");
 const changeStream   = require("./utils/changeStreamListener");
 
 const app  = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 
 // ── Connect to MongoDB, then start real-time listener ─────────────────────────
 const mongoose = require("mongoose");
@@ -36,6 +38,12 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // ── API Routes ────────────────────────────────────────────────────────────────
 
+// Auth routes (public)
+app.use("/api/auth", authRoute);
+
+// User routes (protected)
+app.use("/api/user", userRoute);
+
 // Existing sheet import routes
 app.use("/api", sheetsRoute);
 app.use("/",    sheetsRoute);   // Root-level /parse-sheet compatibility
@@ -61,6 +69,14 @@ const server = app.listen(PORT, () => {
   console.log(`   GET  /parse-sheet?sheet_url=<url>       → flat JSON array`);
   console.log(`   POST /api/extract  { "url": "..." }     → rich JSON + MongoDB`);
   console.log(`   GET  /api/imports                       → list past imports`);
+  console.log(`\n── Auth Routes ──────────────────────────────────────────────`);
+  console.log(`   POST /api/auth/send-otp                 → send OTP (demo: 123456)`);
+  console.log(`   POST /api/auth/verify-otp               → verify OTP → JWT`);
+  console.log(`\n── User Routes (protected) ──────────────────────────────────`);
+  console.log(`   GET  /api/user/me                       → get user profile`);
+  console.log(`   POST /api/user/save-onboarding          → save onboarding data`);
+  console.log(`   POST /api/user/add-upload               → add upload record`);
+  console.log(`   GET  /api/user/uploads                  → list uploads by branch`);
   console.log(`\n── Inventory Routes ─────────────────────────────────────────`);
   console.log(`   POST /api/sync-sheet                    → sync sheet → DB → AI`);
   console.log(`   POST /api/run-analysis                  → re-run alerts + AI`);

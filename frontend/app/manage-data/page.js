@@ -17,6 +17,9 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { BrandLogo } from "@/components/BrandLogo";
 import { UploadModal, UPLOAD_STORAGE_KEY, getStoredUploads } from "@/components/UploadModal";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { useAuth } from "@/lib/auth-context";
+import { addUpload } from "@/lib/api";
 import {
   productInventory,
   BRANCH_OPTIONS,
@@ -47,6 +50,7 @@ import {
   Eye,
   ChevronDown,
   ChevronUp,
+  LogOut,
 } from "lucide-react";
 
 /* ─── Status helpers ─── */
@@ -460,7 +464,8 @@ function SummaryCard({ icon: Icon, label, value, color, bg }) {
 
 /* ─── Main Page ─── */
 
-export default function ManageDataPage() {
+function ManageDataContent() {
+  const { user, logout, refreshUser } = useAuth();
   const [branch, setBranch] = useState("All Branches");
   const [stockFilter, setStockFilter] = useState("All");
   const [categoryFilter, setCategoryFilter] = useState("All");
@@ -469,10 +474,21 @@ export default function ManageDataPage() {
   const [uploads, setUploads] = useState([]);
   const [activeTab, setActiveTab] = useState("inventory"); // inventory | sources
 
-  // Load uploads from sessionStorage
+  // Load uploads: backend user data first, then sessionStorage fallback
   useEffect(() => {
-    setUploads(getStoredUploads());
-  }, [modalOpen]); // refresh when modal closes
+    if (user?.uploads?.length > 0) {
+      setUploads(user.uploads.map((u) => ({
+        id: u.uploadId,
+        type: u.type,
+        branch: u.branch,
+        source: u.source,
+        extractedData: u.extractedData,
+        timestamp: u.timestamp,
+      })));
+    } else {
+      setUploads(getStoredUploads());
+    }
+  }, [user, modalOpen]);
 
   const filteredProducts = useMemo(() => {
     return productInventory.filter((p) => {
@@ -524,6 +540,16 @@ export default function ManageDataPage() {
                 Dashboard
               </Button>
             </Link>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="rounded-full text-muted-foreground hover:text-red-600 hover:bg-red-50"
+              onClick={logout}
+              title="Logout"
+            >
+              <LogOut className="size-4" />
+            </Button>
           </div>
         </div>
       </header>
@@ -695,11 +721,27 @@ export default function ManageDataPage() {
       <UploadModal
         open={modalOpen}
         onOpenChange={setModalOpen}
-        onComplete={() => {
+        onComplete={async (uploadData) => {
           setUploads(getStoredUploads());
           setModalOpen(false);
+          if (uploadData) {
+            try {
+              await addUpload(uploadData);
+              await refreshUser();
+            } catch (err) {
+              console.warn("[ManageData] Backend upload save failed:", err.message);
+            }
+          }
         }}
       />
     </div>
+  );
+}
+
+export default function ManageDataPage() {
+  return (
+    <ProtectedRoute>
+      <ManageDataContent />
+    </ProtectedRoute>
   );
 }

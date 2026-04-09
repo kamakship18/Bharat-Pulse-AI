@@ -18,6 +18,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { STORAGE_KEY } from "@/lib/mock-data";
 import { VoiceOnboarding } from "@/components/VoiceOnboarding";
+import { saveOnboarding } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import {
   Building2,
   MapPin,
@@ -63,6 +65,7 @@ const initialFeatures = () =>
 
 export function StepForm() {
   const router = useRouter();
+  const { isAuthenticated, refreshUser } = useAuth();
   const [step, setStep] = useState(1);
   const [businessName, setBusinessName] = useState("");
   const [location, setLocation] = useState("");
@@ -71,6 +74,8 @@ export function StepForm() {
   const [branches, setBranches] = useState([""]);
   const [features, setFeatures] = useState(initialFeatures);
   const [uploadPref, setUploadPref] = useState("sheets");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   // Voice mode state
   const [voiceMode, setVoiceMode] = useState(false);
@@ -118,7 +123,7 @@ export function StepForm() {
     return true;
   };
 
-  const persistAndGo = () => {
+  const persistAndGo = async () => {
     const payload = {
       businessName,
       location,
@@ -126,13 +131,31 @@ export function StepForm() {
       branchCount: Number.parseInt(branchCount, 10) || 1,
       branches,
       features,
-      uploadPref,
+      uploadPreference: uploadPref,
     };
+
+    // Always persist to sessionStorage as fallback
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {
       /* ignore */
     }
+
+    // Save to backend if authenticated
+    if (isAuthenticated) {
+      setSaving(true);
+      setSaveError("");
+      try {
+        await saveOnboarding(payload);
+        await refreshUser();
+      } catch (err) {
+        console.warn("[Onboarding] Backend save failed:", err.message);
+        setSaveError("Could not save to server, but your data is stored locally.");
+      } finally {
+        setSaving(false);
+      }
+    }
+
     router.push("/dashboard");
   };
 
@@ -478,10 +501,20 @@ export function StepForm() {
           <Button
             type="button"
             className="btn-glow rounded-full px-8 font-semibold shadow-md"
+            disabled={saving}
             onClick={persistAndGo}
           >
-            <Rocket className="mr-2 size-4" />
-            Launch Dashboard
+            {saving ? (
+              <>
+                <span className="mr-2 inline-block size-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Rocket className="mr-2 size-4" />
+                Launch Dashboard
+              </>
+            )}
           </Button>
         )}
       </div>

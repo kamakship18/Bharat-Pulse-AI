@@ -11,6 +11,9 @@ import { AlertCard } from "@/components/AlertCard";
 import { RecommendationCard } from "@/components/RecommendationCard";
 import { ProfilePanel } from "@/components/ProfilePanel";
 import { UploadModal } from "@/components/UploadModal";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { useAuth } from "@/lib/auth-context";
+import { addUpload } from "@/lib/api";
 import {
   salesTrend,
   stockByBranch,
@@ -39,6 +42,7 @@ import {
   BarChart3,
   ShieldAlert,
   Activity,
+  LogOut,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 
@@ -197,33 +201,48 @@ function DemandTrendingPanel() {
 }
 
 /* ─── Main Dashboard ─── */
-export default function DashboardPage() {
+function DashboardContent() {
+  const { user, logout, refreshUser } = useAuth();
   const [hasData, setHasData] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [profile, setProfile] = useState(defaultProfile);
 
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const data = JSON.parse(raw);
+    // Populate profile from backend user data first, then fallback to sessionStorage
+    if (user?.businessData?.name) {
       setProfile({
-        businessName: data.businessName || defaultProfile.businessName,
-        location: data.location || defaultProfile.location,
-        businessType: data.businessType || defaultProfile.businessType,
-        features: { ...defaultProfile.features, ...(data.features || {}) },
+        businessName: user.businessData.name || defaultProfile.businessName,
+        location: user.businessData.location || defaultProfile.location,
+        businessType: user.businessData.type || defaultProfile.businessType,
+        features: { ...defaultProfile.features, ...(user.businessData.features || {}) },
       });
-    } catch {
-      /* ignore */
+      if (user.uploads?.length > 0) {
+        setHasData(true);
+      }
+    } else {
+      try {
+        const raw = sessionStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        setProfile({
+          businessName: data.businessName || defaultProfile.businessName,
+          location: data.location || defaultProfile.location,
+          businessType: data.businessType || defaultProfile.businessType,
+          features: { ...defaultProfile.features, ...(data.features || {}) },
+        });
+      } catch {
+        /* ignore */
+      }
     }
-    // Check if any uploads exist
+
+    // Check sessionStorage uploads as fallback
     try {
       const uploads = sessionStorage.getItem("bharat-pulse-uploads");
       if (uploads && JSON.parse(uploads).length > 0) {
         setHasData(true);
       }
     } catch {}
-  }, []);
+  }, [user]);
 
   const charts = useMemo(
     () => (
@@ -289,6 +308,16 @@ export default function DashboardPage() {
             >
               <Plus className="mr-2 size-4" />
               Add Data
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="rounded-full text-muted-foreground hover:text-red-600 hover:bg-red-50"
+              onClick={logout}
+              title="Logout"
+            >
+              <LogOut className="size-4" />
             </Button>
           </div>
         </div>
@@ -466,11 +495,28 @@ export default function DashboardPage() {
       <UploadModal
         open={modalOpen}
         onOpenChange={setModalOpen}
-        onComplete={() => {
+        onComplete={async (uploadData) => {
           setHasData(true);
           setModalOpen(false);
+          // Save upload to backend
+          if (uploadData) {
+            try {
+              await addUpload(uploadData);
+              await refreshUser();
+            } catch (err) {
+              console.warn("[Dashboard] Backend upload save failed:", err.message);
+            }
+          }
         }}
       />
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <ProtectedRoute>
+      <DashboardContent />
+    </ProtectedRoute>
   );
 }

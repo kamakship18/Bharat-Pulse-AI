@@ -1,4 +1,5 @@
 import { Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
+import { Providers } from "@/components/Providers";
 import "./globals.css";
 
 const fontSans = Plus_Jakarta_Sans({
@@ -25,7 +26,7 @@ export default function RootLayout({ children }) {
       className={`${fontSans.variable} ${fontMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background font-sans text-foreground">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
