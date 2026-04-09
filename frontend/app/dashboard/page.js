@@ -131,7 +131,7 @@ export default function DashboardPage() {
               onClick={() => setModalOpen(true)}
             >
               <FileSpreadsheet className="mr-2 size-4" />
-              Upload Sheet
+              Upload Data
             </Button>
             <Button
               type="button"
