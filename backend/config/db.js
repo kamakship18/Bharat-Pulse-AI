@@ -5,7 +5,7 @@ const mongoose = require("mongoose");
  * Call this once at server startup (server.js).
  */
 async function connectDB() {
-  const uri = process.env.MONGODB_URI;
+  const uri = typeof process.env.MONGODB_URI === "string" ? process.env.MONGODB_URI.trim() : "";
 
   if (!uri) {
     console.warn(

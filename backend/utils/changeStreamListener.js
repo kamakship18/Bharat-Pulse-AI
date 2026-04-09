@@ -22,6 +22,13 @@ async function startChangeStreamListener() {
     return;
   }
 
+  if (mongoose.connection.readyState !== 1) {
+    console.warn(
+      "[ChangeStream] Skipped — MongoDB is not connected (set MONGODB_URI in backend/.env)."
+    );
+    return;
+  }
+
   try {
     const collection = mongoose.connection.collection("inventoryitems");
 
@@ -37,6 +44,14 @@ async function startChangeStreamListener() {
         fullDocument: "updateLookup", // Always include the full doc after change
       }
     );
+
+    if (!_changeStream || typeof _changeStream.on !== "function") {
+      console.error(
+        "[ChangeStream] Unexpected watch() result — driver may require a connected replica set / Atlas."
+      );
+      _isListening = false;
+      return;
+    }
 
     _isListening = true;
     console.log("[ChangeStream] ✅ Listening to inventoryitems collection...");
@@ -101,7 +116,7 @@ async function startChangeStreamListener() {
  * stopChangeStreamListener — gracefully close the stream.
  */
 async function stopChangeStreamListener() {
-  if (_changeStream) {
+  if (_changeStream && typeof _changeStream.close === "function") {
     await _changeStream.close();
     _changeStream = null;
     _isListening  = false;

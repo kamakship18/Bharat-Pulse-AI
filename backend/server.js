@@ -1,7 +1,7 @@
-require("dotenv").config();
+require("./config/loadEnv");
+const path = require("path");
 const express  = require("express");
 const cors     = require("cors");
-const path     = require("path");
 const connectDB = require("./config/db");
 
 const sheetsRoute    = require("./routes/sheets");
@@ -12,13 +12,19 @@ const app  = express();
 const PORT = process.env.PORT || 3000;
 
 // ── Connect to MongoDB, then start real-time listener ─────────────────────────
-connectDB().then(async () => {
-  // Start change stream after DB is confirmed connected
-  await changeStream.startChangeStreamListener();
-}).catch((err) => {
-  // connectDB already logs the error; don't crash the server
-  console.warn("[Server] DB unavailable on start — change stream skipped.");
-});
+const mongoose = require("mongoose");
+
+connectDB()
+  .then(async () => {
+    if (mongoose.connection.readyState !== 1) {
+      console.warn("[Server] MongoDB not connected — change stream skipped.");
+      return;
+    }
+    await changeStream.startChangeStreamListener();
+  })
+  .catch((err) => {
+    console.warn("[Server] DB unavailable on start — change stream skipped.", err?.message || "");
+  });
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors());
@@ -65,7 +71,9 @@ const server = app.listen(PORT, () => {
   console.log(`   PATCH /api/alerts/:id/resolve           → resolve an alert`);
   console.log(`\n── System ───────────────────────────────────────────────────`);
   console.log(`   GET  /api/health                        → health check`);
-  console.log(`   AI:  ${process.env.GEMINI_API_KEY ? "✅ Gemini enabled" : "⚠️  No GEMINI_API_KEY — AI disabled"}`);
+  console.log(
+    `   AI:  ${String(process.env.GEMINI_API_KEY || "").trim() ? "✅ Gemini enabled" : "⚠️  No GEMINI_API_KEY — AI disabled"}`
+  );
   console.log("─────────────────────────────────────────────────────────────\n");
 });
 
