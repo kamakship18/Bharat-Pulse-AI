@@ -118,3 +118,31 @@ export async function addUpload(uploadData) {
 export async function getUploads() {
   return apiFetch("/user/uploads");
 }
+
+// ── Predictive Intelligence APIs ─────────────────────────────────────────────
+
+export async function runPrediction(location, lookaheadDays = 14) {
+  return apiFetch("/predictions/run", {
+    method: "POST",
+    body: JSON.stringify({ location, lookaheadDays }),
+  });
+}
+
+export async function getPrediction(location) {
+  return apiFetch(`/predictions/run?location=${encodeURIComponent(location || "Chandigarh")}`);
+}
+
+export async function getWeather(location) {
+  return apiFetch(`/predictions/weather?location=${encodeURIComponent(location || "Chandigarh")}`);
+}
+
+export async function getEvents(location, lookaheadDays = 14) {
+  return apiFetch(`/predictions/events?location=${encodeURIComponent(location || "Chandigarh")}&lookaheadDays=${lookaheadDays}`);
+}
+
+export async function simulatePrediction(location, products) {
+  return apiFetch("/predictions/simulate", {
+    method: "POST",
+    body: JSON.stringify({ location, products }),
+  });
+}

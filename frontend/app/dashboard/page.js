@@ -13,7 +13,7 @@ import { ProfilePanel } from "@/components/ProfilePanel";
 import { UploadModal } from "@/components/UploadModal";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth-context";
-import { addUpload } from "@/lib/api";
+import { addUpload, getPrediction } from "@/lib/api";
 import {
   salesTrend,
   stockByBranch,
@@ -23,6 +23,7 @@ import {
   demandTrending,
   branchComparison,
   stockHealth,
+  fallbackPrediction,
   STORAGE_KEY,
 } from "@/lib/mock-data";
 import {
@@ -43,6 +44,10 @@ import {
   ShieldAlert,
   Activity,
   LogOut,
+  CloudSun,
+  Calendar,
+  Zap,
+  RefreshCw,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 
@@ -166,18 +171,93 @@ function BranchComparisonPanel() {
   );
 }
 
-/* ─── Demand Trending ─── */
-function DemandTrendingPanel() {
+/* ─── Weather & Events Signal Panel ─── */
+function SignalsPanel({ signals }) {
+  if (!signals) return null;
+  const { weather, events } = signals;
+
+  const conditionEmoji = {
+    heatwave: "🔥", warm: "☀️", rainy: "🌧️", cold: "❄️",
+    humid: "💧", pleasant: "🌤️",
+  };
+
+  return (
+    <Card className="overflow-hidden rounded-2xl border-white/50 bg-white/70 shadow-lg backdrop-blur-md">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-sm font-bold">
+          <Zap className="size-4 text-primary" />
+          External Signals (Live)
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Weather */}
+        <div className="flex items-center gap-3 rounded-xl bg-gradient-to-r from-blue-50 to-sky-50 p-3.5">
+          <CloudSun className="size-5 text-blue-600" />
+          <div className="flex-1">
+            <p className="text-xs font-bold text-blue-900">Weather</p>
+            <p className="text-[10px] text-blue-700/70">{weather?.description || "N/A"}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-lg font-extrabold text-blue-700">
+              {conditionEmoji[weather?.condition] || "🌡️"} {weather?.temperature || "--"}°C
+            </p>
+            <p className="text-[10px] font-medium text-blue-600 capitalize">{weather?.condition || "unknown"}</p>
+          </div>
+        </div>
+
+        {/* Upcoming Events */}
+        {events?.festivals?.length > 0 && (
+          <div className="space-y-2">
+            <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+              <Calendar className="size-3" /> Upcoming Events
+            </p>
+            {events.festivals.slice(0, 3).map((f, i) => (
+              <div key={i} className="flex items-center justify-between rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2">
+                <div>
+                  <p className="text-xs font-bold text-amber-900">{f.name}</p>
+                  <p className="text-[10px] text-amber-700/70">{f.date}</p>
+                </div>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  f.daysUntil <= 3 ? "bg-red-100 text-red-700" :
+                  f.daysUntil <= 7 ? "bg-amber-100 text-amber-700" :
+                  "bg-emerald-100 text-emerald-700"
+                }`}>
+                  {f.daysUntil === 0 ? "Today!" : `${f.daysUntil}d away`}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Active Seasonal */}
+        {events?.seasonal?.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {events.seasonal.map((s, i) => (
+              <span key={i} className="rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-bold text-violet-700">
+                {s.name} ({s.multiplier}x)
+              </span>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ─── Predictive Demand Trending ─── */
+function PredictiveDemandPanel({ insights }) {
+  const items = insights && insights.length > 0 ? insights : demandTrending;
+
   return (
     <Card className="overflow-hidden rounded-2xl border-white/50 bg-white/70 shadow-lg backdrop-blur-md">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-bold">
           <TrendingUp className="size-4 text-primary" />
-          Trending Demand
+          AI Demand Forecast
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2.5">
-        {demandTrending.map((item, i) => (
+        {items.map((item, i) => (
           <motion.div
             key={item.product}
             initial={{ opacity: 0, x: -8 }}
@@ -191,7 +271,7 @@ function DemandTrendingPanel() {
               <p className="text-[10px] text-muted-foreground">{item.reason}</p>
             </div>
             <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-600">
-              {item.demand}
+              {item.demand || item.demandChange}
             </span>
           </motion.div>
         ))}
@@ -206,6 +286,8 @@ function DashboardContent() {
   const [hasData, setHasData] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [profile, setProfile] = useState(defaultProfile);
+  const [prediction, setPrediction] = useState(null);
+  const [predictionLoading, setPredictionLoading] = useState(false);
 
   useEffect(() => {
     // Populate profile from backend user data first, then fallback to sessionStorage
@@ -243,6 +325,49 @@ function DashboardContent() {
       }
     } catch {}
   }, [user]);
+
+  // ── Fetch Predictive Intelligence ─────────────────────────────────────────
+  const fetchPredictions = async (loc) => {
+    setPredictionLoading(true);
+    try {
+      const data = await getPrediction(loc || profile.location || "Chandigarh");
+      if (data && data.success !== false) {
+        setPrediction(data);
+      }
+    } catch (err) {
+      console.warn("[Dashboard] Prediction API unavailable:", err.message);
+      setPrediction(fallbackPrediction);
+    } finally {
+      setPredictionLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (hasData) {
+      fetchPredictions(profile.location);
+    }
+  }, [hasData, profile.location]);
+
+  // Derive alerts / recommendations from prediction or fallback
+  const liveAlerts = prediction?.alerts?.map((a, i) => ({
+    id: a.id || `pa_${i}`,
+    title: a.title,
+    detail: a.detail,
+    severity: a.severity,
+  })) || demoAlerts;
+
+  const liveRecommendations = prediction?.recommendations?.map((r, i) => ({
+    id: r.id || `pr_${i}`,
+    title: r.title,
+    detail: r.detail,
+    impact: r.impact || "Medium",
+  })) || demoRecommendations;
+
+  const liveDemandInsights = prediction?.demandInsights || [];
+
+  const topInsight = prediction?.summary
+    ? `${prediction.signals?.weather?.condition === "heatwave" ? "Heatwave" : prediction.signals?.weather?.condition || "Weather"} detected (${prediction.signals?.weather?.temperature || "--"}°C) — ${prediction.summary.totalAlerts} alerts, ${prediction.summary.totalRecommendations} recommendations generated.`
+    : "Wedding season detected in your region — sweets & dry fruits demand trending +28%. Consider stocking up.";
 
   const charts = useMemo(
     () => (
@@ -421,18 +546,18 @@ function DashboardContent() {
                 <StockHealthPanel />
               </motion.div>
 
-              {/* ─── ALERTS + RECOMMENDATIONS ─── */}
+              {/* ─── ALERTS + RECOMMENDATIONS (Live from Predictive Engine) ─── */}
               <motion.div
                 className="grid gap-6 lg:grid-cols-2"
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.15, duration: 0.4 }}
               >
-                <AlertCard title="Alerts" items={demoAlerts} />
-                <RecommendationCard title="Recommendations" items={demoRecommendations} />
+                <AlertCard title="Predictive Alerts" items={liveAlerts} />
+                <RecommendationCard title="AI Recommendations" items={liveRecommendations} />
               </motion.div>
 
-              {/* ─── AI Insight Banner ─── */}
+              {/* ─── AI Insight Banner (Live) ─── */}
               <motion.div
                 className="flex items-center gap-3 rounded-2xl bg-gradient-to-r from-indigo-50 via-violet-50 to-purple-50 border border-primary/10 px-5 py-4 shadow-sm"
                 initial={{ opacity: 0, y: 12 }}
@@ -441,25 +566,39 @@ function DashboardContent() {
               >
                 <Brain className="size-5 text-primary animate-ai-pulse" />
                 <div className="flex-1">
-                  <p className="text-sm font-bold text-primary">AI Insight</p>
-                  <p className="text-xs text-muted-foreground">
-                    Wedding season detected in your region — sweets & dry fruits demand trending +28%. Consider stocking up.
-                  </p>
+                  <p className="text-sm font-bold text-primary">Predictive Intelligence</p>
+                  <p className="text-xs text-muted-foreground">{topInsight}</p>
                 </div>
-                <Button variant="outline" size="sm" className="rounded-full text-xs bg-white/80 hover:bg-white">
-                  View Details
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full text-xs bg-white/80 hover:bg-white"
+                  onClick={() => fetchPredictions(profile.location)}
+                  disabled={predictionLoading}
+                >
+                  <RefreshCw className={`mr-1 size-3 ${predictionLoading ? "animate-spin" : ""}`} />
+                  {predictionLoading ? "Analyzing..." : "Refresh"}
                 </Button>
               </motion.div>
 
-              {/* ─── BRANCH COMPARISON + DEMAND TRENDING ─── */}
+              {/* ─── SIGNALS + DEMAND FORECAST ─── */}
               <motion.div
                 className="grid gap-6 lg:grid-cols-2"
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.25, duration: 0.4 }}
               >
+                <SignalsPanel signals={prediction?.signals} />
+                <PredictiveDemandPanel insights={liveDemandInsights} />
+              </motion.div>
+
+              {/* ─── BRANCH COMPARISON ─── */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.28, duration: 0.4 }}
+              >
                 <BranchComparisonPanel />
-                <DemandTrendingPanel />
               </motion.div>
 
               {/* ─── Charts ─── */}

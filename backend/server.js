@@ -4,11 +4,12 @@ const express  = require("express");
 const cors     = require("cors");
 const connectDB = require("./config/db");
 
-const sheetsRoute    = require("./routes/sheets");
-const inventoryRoute = require("./routes/inventory");
-const authRoute      = require("./routes/auth");
-const userRoute      = require("./routes/user");
-const changeStream   = require("./utils/changeStreamListener");
+const sheetsRoute      = require("./routes/sheets");
+const inventoryRoute   = require("./routes/inventory");
+const predictionsRoute = require("./routes/predictions");
+const authRoute        = require("./routes/auth");
+const userRoute        = require("./routes/user");
+const changeStream     = require("./utils/changeStreamListener");
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -51,6 +52,9 @@ app.use("/",    sheetsRoute);   // Root-level /parse-sheet compatibility
 // New AI inventory routes
 app.use("/api", inventoryRoute);
 
+// Predictive Intelligence Engine routes
+app.use("/api", predictionsRoute);
+
 // ── Fallback ──────────────────────────────────────────────────────────────────
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
@@ -85,10 +89,16 @@ const server = app.listen(PORT, () => {
   console.log(`   GET  /api/alerts                        → list alerts`);
   console.log(`   GET  /api/recommendations               → AI recommendations`);
   console.log(`   PATCH /api/alerts/:id/resolve           → resolve an alert`);
+  console.log(`\n── Predictive Intelligence ──────────────────────────────────`);
+  console.log(`   POST /api/predictions/run               → run full prediction`);
+  console.log(`   GET  /api/predictions/run?location=...   → quick prediction`);
+  console.log(`   GET  /api/predictions/weather?location=  → weather data`);
+  console.log(`   GET  /api/predictions/events?location=   → events/festivals`);
+  console.log(`   POST /api/predictions/simulate           → simulate with custom data`);
   console.log(`\n── System ───────────────────────────────────────────────────`);
   console.log(`   GET  /api/health                        → health check`);
   console.log(
-    `   AI:  ${String(process.env.GEMINI_API_KEY || "").trim() ? "✅ Gemini enabled" : "⚠️  No GEMINI_API_KEY — AI disabled"}`
+    `   AI:  ${String(process.env.GROQ_API_KEY || "").trim() ? "✅ Groq enabled" : "⚠️  No GROQ_API_KEY — AI recommendations disabled"}`
   );
   console.log("─────────────────────────────────────────────────────────────\n");
 });

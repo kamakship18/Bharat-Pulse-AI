@@ -2,7 +2,7 @@
 
 > **Google Sheet → MongoDB → Alerts & AI Recommendations — in real time.**
 
-A Node.js / Express backend that syncs any public Google Sheet into MongoDB, automatically detects inventory problems with a rule-based alert engine, and generates actionable AI recommendations via Google Gemini.
+A Node.js / Express backend that syncs any public Google Sheet into MongoDB, automatically detects inventory problems with a rule-based alert engine, and generates actionable AI recommendations via **Groq** (OpenAI-compatible chat API).
 
 ---
 
@@ -17,7 +17,7 @@ POST /api/sync-sheet
         │                                │
   Alert Engine  ──────────────────► Alert (MongoDB)
         │
-  Gemini AI Engine ──────────────► Recommendation (MongoDB)
+  Groq AI Engine ────────────────► Recommendation (MongoDB)
         │
   GET /api/inventory
   GET /api/alerts
@@ -47,11 +47,12 @@ Edit `.env`:
 | Variable | Required | Description |
 |---|---|---|
 | `MONGODB_URI` | ✅ | MongoDB Atlas or local connection string |
-| `GEMINI_API_KEY` | ⚠️ Recommended | Free from [aistudio.google.com](https://aistudio.google.com/app/apikey) |
-| `PORT` | No | Default: `3000` |
+| `GROQ_API_KEY` | ⚠️ Recommended | Free from [console.groq.com/keys](https://console.groq.com/keys) |
+| `GROQ_MODEL` | No | Default: `llama-3.3-70b-versatile` |
+| `PORT` | No | Default: `5000` (see your `.env`) |
 | `POLLING_INTERVAL_MS` | No | Auto-refresh interval. Default: `60000` (1 min) |
 
-> **Alerts work without a Gemini key.** AI recommendations are simply skipped if `GEMINI_API_KEY` is not set.
+> **Alerts work without a Groq key.** AI recommendations are skipped if `GROQ_API_KEY` is not set.
 
 ### 3. Start the Server
 
@@ -277,7 +278,7 @@ Any DB write to inventoryitems
 └── utils/
     ├── sheetExtractor.js         # Google Sheets → JSON parser
     ├── alertEngine.js           # ⭐ Rule-based alert engine
-    ├── aiEngine.js              # ⭐ Gemini AI engine
+    ├── aiEngine.js              # ⭐ Groq AI engine
     └── changeStreamListener.js  # ⭐ Real-time MongoDB watcher
 ```
 
@@ -287,6 +288,6 @@ Any DB write to inventoryitems
 
 ## Notes
 
-- **Free Gemini tier** has rate limits (~15 req/min). The AI engine adds a 300ms delay between items automatically.
+- **Groq** has generous free-tier limits; the AI engine adds a short delay between items to stay polite to the API.
 - **Upsert logic** means running `/sync-sheet` or `/run-analysis` multiple times is always safe — no duplicates.
 - **productId** is the upsert key. Use a consistent `sku` / `id` column for reliable updates.

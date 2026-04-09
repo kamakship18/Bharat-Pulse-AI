@@ -123,4 +123,39 @@ export const demoRecommendations = [
   },
 ];
 
+// ── Predictive Intelligence Fallback Data ─────────────────────────────────────
+// Used when the prediction API is unreachable.
+
+export const fallbackPrediction = {
+  signals: {
+    weather: { condition: "heatwave", temperature: 38, humidity: 35, description: "Hot and dry winds" },
+    events: {
+      upcomingFestivals: 1,
+      activeSeasonalPatterns: 2,
+      isWeekend: false,
+      festivals: [{ name: "Wedding Season", daysUntil: 0, relevance: "active", multiplier: 1.8 }],
+      seasonal: [{ name: "Summer Season", type: "seasonal", multiplier: 1.5 }],
+    },
+  },
+  alerts: [
+    { id: "w1", type: "weather_impact", severity: "warning", title: "🔥 Heatwave alert (38°C) — cold beverage demand surging", detail: "Weather: Hot and dry winds. Increase cold drink & ice cream inventory by 40-50%.", source: "weather" },
+    { id: "e1", type: "expiry_risk", severity: "critical", title: "₹8,000 inventory at expiry risk", detail: "Multiple products approaching expiry — run discounts or combo offers.", source: "aggregate" },
+    { id: "e2", type: "event_impact", severity: "info", title: "🎉 Wedding Season active — demand surge for sweets & dry fruits", detail: "Products affected: sweets, dry fruits, gifts, decorations.", source: "festival" },
+    { id: "s1", type: "stockout_risk", severity: "warning", title: "📉 Coca-Cola 2L stock critically low (8 units) with 2.7x demand", detail: "Restock immediately — stock will last only ~2 days at current demand.", source: "stockout" },
+  ],
+  recommendations: [
+    { id: "r1", type: "discount", title: "Run clearance on expiring stock", detail: "Run aggressive discount (30-50% off) on expiring items to clear inventory before write-off.", impact: "High" },
+    { id: "r2", type: "restock", title: "Restock Coca-Cola 2L urgently", detail: "Cold drinks demand projected +80% due to heatwave. Order at least 25 more units.", impact: "High" },
+    { id: "r3", type: "demand_insight", title: "Stock up sweets for wedding season", detail: "Wedding season driving 1.8x demand for sweets & dry fruits. Ensure sufficient stock.", impact: "Medium" },
+    { id: "r4", type: "demand_insight", title: "Increase ice cream inventory by 80%", detail: "Heatwave conditions (38°C) are driving 80% higher demand for ice cream.", impact: "High" },
+  ],
+  demandInsights: [
+    { product: "Coca-Cola 2L", demand: "+170%", reason: "Heatwave + Summer Season", icon: "🔥" },
+    { product: "Amul Ice Cream", demand: "+80%", reason: "Heatwave (38°C)", icon: "🔥" },
+    { product: "Kaju Katli", demand: "+80%", reason: "Wedding Season", icon: "🎉" },
+    { product: "Haldiram Namkeen", demand: "+50%", reason: "Summer Season", icon: "☀️" },
+  ],
+  summary: { totalAlerts: 4, criticalAlerts: 1, totalRecommendations: 4, weatherCondition: "heatwave", activeFestivals: 1 },
+};
+
 export const STORAGE_KEY = "bharat-pulse-onboarding";

@@ -1,40 +1,28 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const axios = require("axios");
 const Recommendation = require("../models/Recommendation");
 
-// ── Gemini client (lazy init) ─────────────────────────────────────────────────
+// ── Groq (OpenAI-compatible) ────────────────────────────────────────────────
+// https://console.groq.com/docs/openai
 
-let _genAI = null;
-let _model = null;
-
-function getModel() {
-  if (!_model) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error(
-        "GEMINI_API_KEY is not set in .env — add it to enable AI recommendations."
-      );
-    }
-    _genAI = new GoogleGenerativeAI(apiKey);
-    _model = _genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-  }
-  return _model;
-}
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+const DEFAULT_MODEL =
+  process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
 // ── Prompt builder ────────────────────────────────────────────────────────────
 
 function buildPrompt(item) {
   const snapshot = {
-    productId:     item.productId,
-    name:          item.name,
-    category:      item.category,
-    quantity:      item.quantity,
+    productId: item.productId,
+    name: item.name,
+    category: item.category,
+    quantity: item.quantity,
     minStockLevel: item.minStockLevel,
     maxStockLevel: item.maxStockLevel,
-    price:         item.price,
-    expiryDate:    item.expiryDate
+    price: item.price,
+    expiryDate: item.expiryDate
       ? new Date(item.expiryDate).toISOString().split("T")[0]
       : null,
-    lastSyncedAt:  item.lastSyncedAt,
+    lastSyncedAt: item.lastSyncedAt,
   };
 
   return `You are a business assistant managing an inventory system.
@@ -65,14 +53,12 @@ Respond ONLY with a single valid JSON object (no markdown, no explanation, no co
 function parseAIResponse(raw) {
   let text = (raw || "").trim();
 
-  // Strip markdown code fences if the model adds them despite instructions
   text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
 
-  const parsed = JSON.parse(text); // Let it throw — caller will catch
+  const parsed = JSON.parse(text);
 
-  // Validate required fields
-  const validTypes     = ["restock", "discount", "demand_insight", "hold", "other"];
-  const validPriority  = ["low", "medium", "high", "urgent"];
+  const validTypes = ["restock", "discount", "demand_insight", "hold", "other"];
+  const validPriority = ["low", "medium", "high", "urgent"];
 
   if (!validTypes.includes(parsed.type)) {
     throw new Error(`Invalid recommendation type: "${parsed.type}"`);
@@ -81,7 +67,7 @@ function parseAIResponse(raw) {
     throw new Error("AI response missing 'suggestion' field.");
   }
   if (!validPriority.includes(parsed.priority)) {
-    parsed.priority = "medium"; // Normalise invalid priority
+    parsed.priority = "medium";
   }
   if (typeof parsed.confidence !== "number") {
     parsed.confidence = null;
@@ -90,6 +76,40 @@ function parseAIResponse(raw) {
   }
 
   return parsed;
+}
+
+/**
+ * Call Groq chat completions API.
+ * @returns {Promise<string>} assistant message content
+ */
+async function callGroq(prompt) {
+  const apiKey = (process.env.GROQ_API_KEY || "").trim();
+  if (!apiKey) {
+    throw new Error("GROQ_API_KEY is not set in .env — add it to enable AI recommendations.");
+  }
+
+  const { data } = await axios.post(
+    GROQ_API_URL,
+    {
+      model: DEFAULT_MODEL,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.35,
+      max_tokens: 1024,
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      timeout: 60_000,
+    }
+  );
+
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content || typeof content !== "string") {
+    throw new Error("Groq returned an empty or invalid response.");
+  }
+  return content;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -103,38 +123,34 @@ function parseAIResponse(raw) {
 async function runForItem(item) {
   let rawText = null;
   try {
-    const model  = getModel();
     const prompt = buildPrompt(item);
-    const result = await model.generateContent(prompt);
-    rawText      = result.response.text();
+    rawText = await callGroq(prompt);
 
     const parsed = parseAIResponse(rawText);
 
-    // Build inventory snapshot (for audit)
     const snapshot = {
-      quantity:      item.quantity,
+      quantity: item.quantity,
       minStockLevel: item.minStockLevel,
       maxStockLevel: item.maxStockLevel,
-      price:         item.price,
-      expiryDate:    item.expiryDate,
+      price: item.price,
+      expiryDate: item.expiryDate,
     };
 
-    // Upsert: one recommendation per item, latest replaces previous
     const doc = await Recommendation.findOneAndUpdate(
       { inventoryItemId: item._id },
       {
         $set: {
-          inventoryItemId:    item._id,
-          productId:          item.productId,
-          productName:        item.name,
-          type:               parsed.type,
-          suggestion:         parsed.suggestion,
-          reasoning:          parsed.reasoning   || null,
-          priority:           parsed.priority,
-          confidence:         parsed.confidence,
-          inventorySnapshot:  snapshot,
-          rawAIResponse:      rawText,
-          generatedAt:        new Date(),
+          inventoryItemId: item._id,
+          productId: item.productId,
+          productName: item.name,
+          type: parsed.type,
+          suggestion: parsed.suggestion,
+          reasoning: parsed.reasoning || null,
+          priority: parsed.priority,
+          confidence: parsed.confidence,
+          inventorySnapshot: snapshot,
+          rawAIResponse: rawText,
+          generatedAt: new Date(),
         },
       },
       { upsert: true, returnDocument: "after" }
@@ -144,11 +160,10 @@ async function runForItem(item) {
       `[AIEngine] ${item.name}: ${parsed.type} (priority: ${parsed.priority})`
     );
     return doc;
-
   } catch (err) {
-    // Non-fatal: log and continue so one bad item doesn't stop the batch
+    const msg = err.response?.data?.error?.message || err.message;
     console.error(
-      `[AIEngine] Failed for "${item.name || item.productId}": ${err.message}`
+      `[AIEngine] Failed for "${item.name || item.productId}": ${msg}`
     );
     if (rawText) console.error(`[AIEngine] Raw response: ${rawText}`);
     return null;
@@ -158,7 +173,7 @@ async function runForItem(item) {
 /**
  * runForAll — run AI recommendations for every inventory item.
  *
- * Runs sequentially to avoid rate-limit issues with the Gemini free tier.
+ * Runs sequentially to avoid rate-limit issues.
  *
  * @param {Object[]} items  Array of InventoryItem documents
  * @returns {Promise<Recommendation[]>}
@@ -168,8 +183,7 @@ async function runForAll(items) {
   for (const item of items) {
     const rec = await runForItem(item);
     if (rec) results.push(rec);
-    // Small delay to be polite to the API rate limits
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, 150));
   }
   console.log(
     `[AIEngine] Generated ${results.length}/${items.length} recommendation(s).`
@@ -178,10 +192,10 @@ async function runForAll(items) {
 }
 
 /**
- * isAvailable — quick check whether Gemini is configured.
+ * isAvailable — Groq API key configured.
  */
 function isAvailable() {
-  return !!process.env.GEMINI_API_KEY;
+  return !!(process.env.GROQ_API_KEY || "").trim();
 }
 
 module.exports = { runForItem, runForAll, isAvailable };
