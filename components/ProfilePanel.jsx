@@ -93,16 +93,16 @@ export function ProfilePanel({
               <Settings className="mr-2 size-3.5" />
               Edit profile
             </Link>
-            <button
-              type="button"
+            <Link
+              href="/manage-data"
               className={cn(
                 buttonVariants({ variant: "secondary" }),
-                "w-full rounded-full transition-all hover:shadow-md"
+                "w-full justify-center rounded-full transition-all hover:shadow-md"
               )}
             >
               <Database className="mr-2 size-3.5" />
               Manage data
-            </button>
+            </Link>
           </div>
         </CardContent>
       </Card>

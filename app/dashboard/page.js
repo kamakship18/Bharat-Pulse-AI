@@ -28,6 +28,7 @@ import {
   Upload,
   Brain,
   ArrowRight,
+  Database,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 
@@ -113,6 +114,16 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
+            <Link href="/manage-data">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full bg-white/70 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:shadow-md"
+              >
+                <Database className="mr-2 size-4" />
+                Manage Data
+              </Button>
+            </Link>
             <Button
               type="button"
               variant="outline"

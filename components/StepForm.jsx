@@ -17,6 +17,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { STORAGE_KEY } from "@/lib/mock-data";
+import { VoiceOnboarding } from "@/components/VoiceOnboarding";
 import {
   Building2,
   MapPin,
@@ -70,6 +71,14 @@ export function StepForm() {
   const [branches, setBranches] = useState([""]);
   const [features, setFeatures] = useState(initialFeatures);
   const [uploadPref, setUploadPref] = useState("sheets");
+
+  // Voice mode state
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [voiceActiveField, setVoiceActiveField] = useState(null);
+
+  // Helper to get voice-active class for a field
+  const vf = (fieldId) =>
+    voiceMode && voiceActiveField === fieldId ? "voice-active-field" : "";
 
   const progress = (step / 5) * 100;
 
@@ -131,6 +140,29 @@ export function StepForm() {
 
   return (
     <div className="w-full">
+      {/* Voice Onboarding Layer */}
+      <VoiceOnboarding
+        businessName={businessName}
+        location={location}
+        businessType={businessType}
+        branchCount={branchCount}
+        branches={branches}
+        features={features}
+        uploadPref={uploadPref}
+        setBusinessName={setBusinessName}
+        setLocation={setLocation}
+        setBusinessType={setBusinessType}
+        setBranchCount={setBranchCount}
+        setBranches={setBranches}
+        setFeatures={setFeatures}
+        setUploadPref={setUploadPref}
+        setStep={setStep}
+        syncBranches={syncBranches}
+        voiceMode={voiceMode}
+        setVoiceMode={setVoiceMode}
+        setVoiceActiveField={setVoiceActiveField}
+      />
+
       {/* Progress Section */}
       <div className="mb-8">
         {/* Step dots */}
@@ -196,7 +228,8 @@ export function StepForm() {
                       value={businessName}
                       onChange={(e) => setBusinessName(e.target.value)}
                       placeholder="e.g. Sharma General Store"
-                      className="rounded-xl bg-white/80 pl-10 shadow-sm transition-shadow focus:shadow-md focus:ring-2 focus:ring-primary/20"
+                      readOnly={voiceMode && voiceActiveField === "businessName"}
+                      className={`rounded-xl bg-white/80 pl-10 shadow-sm transition-shadow focus:shadow-md focus:ring-2 focus:ring-primary/20 ${vf("businessName")}`}
                     />
                   </div>
                 </div>
@@ -209,14 +242,15 @@ export function StepForm() {
                       value={location}
                       onChange={(e) => setLocation(e.target.value)}
                       placeholder="City, State"
-                      className="rounded-xl bg-white/80 pl-10 shadow-sm transition-shadow focus:shadow-md focus:ring-2 focus:ring-primary/20"
+                      readOnly={voiceMode && voiceActiveField === "location"}
+                      className={`rounded-xl bg-white/80 pl-10 shadow-sm transition-shadow focus:shadow-md focus:ring-2 focus:ring-primary/20 ${vf("location")}`}
                     />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label className="font-semibold">Business type</Label>
                   <Select value={businessType} onValueChange={setBusinessType}>
-                    <SelectTrigger className="w-full rounded-xl bg-white/80 shadow-sm">
+                    <SelectTrigger className={`w-full rounded-xl bg-white/80 shadow-sm ${vf("businessType")}`}>
                       <SelectValue placeholder="Select business type" />
                     </SelectTrigger>
                     <SelectContent>
@@ -251,7 +285,8 @@ export function StepForm() {
                     max={12}
                     value={branchCount}
                     onChange={(e) => syncBranches(e.target.value)}
-                    className="rounded-xl bg-white/80 shadow-sm transition-shadow focus:shadow-md focus:ring-2 focus:ring-primary/20"
+                    readOnly={voiceMode && voiceActiveField === "branchCount"}
+                    className={`rounded-xl bg-white/80 shadow-sm transition-shadow focus:shadow-md focus:ring-2 focus:ring-primary/20 ${vf("branchCount")}`}
                   />
                 </div>
                 <Separator />
@@ -263,7 +298,8 @@ export function StepForm() {
                         value={b}
                         onChange={(e) => updateBranch(i, e.target.value)}
                         placeholder={`Branch ${i + 1} name`}
-                        className="rounded-xl bg-white/80 pl-10 shadow-sm transition-shadow focus:shadow-md focus:ring-2 focus:ring-primary/20"
+                        readOnly={voiceMode && voiceActiveField === "branches"}
+                        className={`rounded-xl bg-white/80 pl-10 shadow-sm transition-shadow focus:shadow-md focus:ring-2 focus:ring-primary/20 ${voiceMode && voiceActiveField === "branches" ? "voice-active-field" : ""}`}
                       />
                     </div>
                   ))}
