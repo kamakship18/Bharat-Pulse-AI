@@ -52,10 +52,23 @@ export async function apiFetch(endpoint, options = {}) {
       headers,
     });
 
-    const data = await res.json();
+    const text = await res.text();
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      const snippet = text.replace(/\s+/g, " ").trim().slice(0, 120);
+      const looksLikeProxyFailure =
+        res.status >= 500 &&
+        (/internal server error/i.test(text) || !text || snippet.length < 3);
+      throw new Error(
+        looksLikeProxyFailure
+          ? "API unreachable (is the backend running on the port in frontend/next.config.mjs, usually 5001?). From the repo root run: cd backend && npm run dev"
+          : snippet || `Invalid response (HTTP ${res.status})`
+      );
+    }
 
     if (!res.ok) {
-      // Token expired → clear auth
       if (res.status === 401) {
         clearAuth();
       }
@@ -64,7 +77,6 @@ export async function apiFetch(endpoint, options = {}) {
 
     return data;
   } catch (err) {
-    // Network error
     if (err.name === "TypeError" && err.message.includes("fetch")) {
       throw new Error("Cannot connect to server. Please check your connection.");
     }

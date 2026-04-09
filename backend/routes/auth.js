@@ -13,16 +13,17 @@ const otpStore = new Map();
  */
 router.post("/send-otp", async (req, res) => {
   try {
-    const { phoneNumber } = req.body;
+    const raw = req.body?.phoneNumber;
+    const phoneNumber = raw == null ? "" : String(raw).trim();
 
-    if (!phoneNumber || phoneNumber.trim().length < 10) {
+    if (!phoneNumber || phoneNumber.replace(/\D/g, "").length < 10) {
       return res.status(400).json({
         success: false,
         error: "Please enter a valid phone number (10+ digits).",
       });
     }
 
-    const phone = phoneNumber.trim().replace(/\s+/g, "");
+    const phone = phoneNumber.replace(/\D/g, "");
 
     // Generate OTP — demo mode always uses 123456
     const otp = "123456";
@@ -55,7 +56,9 @@ router.post("/send-otp", async (req, res) => {
  */
 router.post("/verify-otp", async (req, res) => {
   try {
-    const { phoneNumber, otp } = req.body;
+    const { otp } = req.body;
+    const rawPhone = req.body?.phoneNumber;
+    const phoneNumber = rawPhone == null ? "" : String(rawPhone).trim();
 
     if (!phoneNumber || !otp) {
       return res.status(400).json({
@@ -64,7 +67,7 @@ router.post("/verify-otp", async (req, res) => {
       });
     }
 
-    const phone = phoneNumber.trim().replace(/\s+/g, "");
+    const phone = phoneNumber.replace(/\D/g, "");
 
     // Verify OTP
     const stored = otpStore.get(phone);
@@ -84,7 +87,7 @@ router.post("/verify-otp", async (req, res) => {
       });
     }
 
-    if (stored.otp !== otp.trim()) {
+    if (stored.otp !== String(otp).trim()) {
       return res.status(400).json({
         success: false,
         error: "Invalid OTP. Please try again.",
