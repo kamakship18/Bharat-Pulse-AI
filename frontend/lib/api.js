@@ -223,6 +223,20 @@ export async function markNotificationsRead(ids) {
   });
 }
 
+export async function sendTestWhatsApp(to) {
+  return apiFetch("/notifications/test-whatsapp", {
+    method: "POST",
+    body: JSON.stringify({ to }),
+  });
+}
+
+export async function sendWhatsAppReport({ to, items }) {
+  return apiFetch("/notifications/send-report", {
+    method: "POST",
+    body: JSON.stringify({ to, items }),
+  });
+}
+
 // ── Profile APIs ──────────────────────────────────────────────────────────────
 
 export async function updateProfile(data) {

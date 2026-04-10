@@ -830,7 +830,8 @@ router.post("/inventory/restock-order", dbGuard, optionalAuth, async (req, res) 
       `🤖 _BharatPulse AI_ | ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`,
     ].join("\n");
 
-    const sendTo = distPhone || userPhone;
+    const DEMO_PHONE = "+918295057353";
+    const sendTo = distPhone || userPhone || DEMO_PHONE;
     const result = await whatsappEngine.sendAndLog({
       userId,
       to: sendTo,

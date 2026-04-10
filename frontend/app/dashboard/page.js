@@ -811,15 +811,19 @@ function DashboardContent() {
               </motion.div>
 
               {/* ─── WHATSAPP ACTIVITY ─── */}
-              {whatsappActivity.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3, duration: 0.4 }}
-                >
-                  <WhatsAppActivityPanel messages={whatsappActivity} />
-                </motion.div>
-              )}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3, duration: 0.4 }}
+              >
+                <WhatsAppActivityPanel
+                  alerts={liveAlerts}
+                  recommendations={liveRecommendations}
+                  transfers={transferSuggestions}
+                  messages={whatsappActivity}
+                  onRefresh={() => fetchDashboardData(false)}
+                />
+              </motion.div>
 
               {/* ─── Charts ─── */}
               <motion.div
