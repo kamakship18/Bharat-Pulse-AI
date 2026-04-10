@@ -131,19 +131,25 @@ export default function LoginPage() {
       if (res.success) {
         setStep("success");
 
-        // Fetch user data and login
+        // Always hydrate auth context after OTP — if getUserData fails or returns
+        // success: false without throwing, we still need login() so onboarding save runs.
+        let userToLogin = null;
         try {
           const userData = await getUserData();
-          if (userData.success) {
-            login(userData.user);
+          if (userData.success && userData.user) {
+            userToLogin = userData.user;
           }
         } catch {
-          // Login anyway with basic info
-          login({
-            id: res.userId,
-            onboardingCompleted: res.onboardingCompleted,
-          });
+          /* fall back to verify payload */
         }
+        if (!userToLogin) {
+          userToLogin = {
+            id: res.userId,
+            onboardingCompleted: !!res.onboardingCompleted,
+            phoneNumber: cleaned,
+          };
+        }
+        login(userToLogin);
 
         // Redirect after brief success animation
         setTimeout(() => {

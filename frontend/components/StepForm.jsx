@@ -18,7 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { STORAGE_KEY } from "@/lib/mock-data";
 import { VoiceOnboarding } from "@/components/VoiceOnboarding";
-import { saveOnboarding } from "@/lib/api";
+import { saveOnboarding, getToken } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import {
   Building2,
@@ -65,7 +65,7 @@ const initialFeatures = () =>
 
 export function StepForm() {
   const router = useRouter();
-  const { isAuthenticated, refreshUser } = useAuth();
+  const { refreshUser } = useAuth();
   const [step, setStep] = useState(1);
   const [businessName, setBusinessName] = useState("");
   const [location, setLocation] = useState("");
@@ -141,8 +141,10 @@ export function StepForm() {
       /* ignore */
     }
 
-    // Save to backend if authenticated
-    if (isAuthenticated) {
+    // Save to backend whenever we have a session token (isAuthenticated can lag behind
+    // right after login, which previously skipped save and caused a second onboarding).
+    const hasSession = Boolean(getToken());
+    if (hasSession) {
       setSaving(true);
       setSaveError("");
       try {
@@ -150,7 +152,9 @@ export function StepForm() {
         await refreshUser();
       } catch (err) {
         console.warn("[Onboarding] Backend save failed:", err.message);
-        setSaveError("Could not save to server, but your data is stored locally.");
+        setSaveError("Could not save to server. Please try again.");
+        setSaving(false);
+        return;
       } finally {
         setSaving(false);
       }
