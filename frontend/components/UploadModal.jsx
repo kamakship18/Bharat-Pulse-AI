@@ -28,12 +28,14 @@ import {
   Sparkles,
   MapPin,
   ArrowRight,
+  AlertTriangle,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { linkSheet, uploadExcel } from "@/lib/api";
 
-/* ─── OCR Mock Data ─── */
+/* ─── OCR Mock Data (fallback for image/camera only) ─── */
 const OCR_MOCK_RESULTS = [
   { product: "Amul Taza Milk 500ml", quantity: 24, expiry: "2 days", price: 25 },
   { product: "Britannia Bread", quantity: 15, expiry: "1 day", price: 40 },
@@ -61,7 +63,7 @@ function saveUpload(upload) {
 }
 
 export function UploadModal({ open, onOpenChange, onComplete, branches = [] }) {
-  const [mode, setMode] = useState("choose"); // choose | sheet | image | camera | branch | processing | success
+  const [mode, setMode] = useState("choose"); // choose | sheet | image | camera | branch | processing | success | error
   const [sheetLink, setSheetLink] = useState("");
   const [sheetError, setSheetError] = useState("");
   const [uploadedImages, setUploadedImages] = useState([]);
@@ -69,13 +71,18 @@ export function UploadModal({ open, onOpenChange, onComplete, branches = [] }) {
   const [selectedBranch, setSelectedBranch] = useState("");
   const [uploadType, setUploadType] = useState(""); // sheet | image | camera
   const [processProgress, setProcessProgress] = useState(0);
+  const [syncResult, setSyncResult] = useState(null);
+  const [apiError, setApiError] = useState("");
 
   const fileInputRef = useRef(null);
+  const excelInputRef = useRef(null);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
+  const [excelFile, setExcelFile] = useState(null);
+  const [excelResult, setExcelResult] = useState(null);
 
-  const availableBranches = branches.length > 0 ? branches : ["Rajpura", "Chandigarh", "Pinjore"];
+  const availableBranches = branches.length > 0 ? branches : ["Delhi", "Jammu", "Chandigarh", "Panchkula", "Mohali"];
 
   // Clean up camera on close
   useEffect(() => {
@@ -94,6 +101,10 @@ export function UploadModal({ open, onOpenChange, onComplete, branches = [] }) {
     setSelectedBranch("");
     setUploadType("");
     setProcessProgress(0);
+    setSyncResult(null);
+    setApiError("");
+    setExcelFile(null);
+    setExcelResult(null);
   }
 
   function stopCamera() {
@@ -122,8 +133,68 @@ export function UploadModal({ open, onOpenChange, onComplete, branches = [] }) {
     setSheetError("");
     console.log("📊 Google Sheet added:", sheetLink);
     setUploadType("sheet");
-    // Move to branch selection
-    setMode("branch");
+    // Skip branch selection — backend auto-detects branches from tab names
+    handleSheetSync();
+  }
+
+  async function handleSheetSync() {
+    setMode("processing");
+    setSelectedBranch("Auto");
+    setProcessProgress(0);
+    setApiError("");
+
+    try {
+      setProcessProgress(10);
+      const progressInterval = setInterval(() => {
+        setProcessProgress((prev) => Math.min(prev + 4, 85));
+      }, 500);
+
+      const result = await linkSheet(sheetLink.trim(), "Auto");
+      clearInterval(progressInterval);
+
+      if (result.success) {
+        setProcessProgress(100);
+        setSyncResult(result);
+
+        if (result.isMultiTab && result.branches) {
+          setExcelResult({ branches: result.branches, totalItems: result.itemsUpserted });
+          setSelectedBranch(Object.keys(result.branches).join(", "));
+        } else {
+          setSelectedBranch(result.branch || "Auto");
+        }
+
+        const items = (result.items || []).map((item) => ({
+          product: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          expiry: item.expiryDate
+            ? `${Math.max(0, Math.ceil((new Date(item.expiryDate) - new Date()) / (1000*60*60*24)))} days`
+            : "N/A",
+          category: item.category,
+          branch: item.branch,
+        }));
+        setExtractedData(items);
+
+        const upload = {
+          id: `upload-${Date.now()}`,
+          type: "sheet",
+          branch: result.isMultiTab ? Object.keys(result.branches).join(", ") : (result.branch || "Auto"),
+          source: sheetLink,
+          extractedData: items,
+          timestamp: new Date().toISOString(),
+        };
+        saveUpload(upload);
+
+        console.log(`✅ Sheet synced: ${result.itemsUpserted} items${result.isMultiTab ? ` across ${Object.keys(result.branches).length} branches` : ""}`);
+        setTimeout(() => setMode("success"), 500);
+      } else {
+        throw new Error(result.error || "Failed to sync sheet");
+      }
+    } catch (err) {
+      console.error("[UploadModal] Sheet sync failed:", err.message);
+      setApiError(err.message);
+      setMode("error");
+    }
   }
 
   /* ─── Image upload ─── */
@@ -177,12 +248,64 @@ export function UploadModal({ open, onOpenChange, onComplete, branches = [] }) {
     setMode("branch");
   }
 
-  /* ─── Branch selected → simulate processing ─── */
-  function handleBranchSelect(branchName) {
+  /* ─── Excel file selected → skip branch step, upload directly ─── */
+  async function handleExcelSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setExcelFile(file);
+    setUploadType("excel");
+    setSelectedBranch("(auto-detected from sheets)");
+    setMode("processing");
+    setProcessProgress(0);
+    setApiError("");
+
+    try {
+      setProcessProgress(10);
+      const progressInterval = setInterval(() => {
+        setProcessProgress((prev) => Math.min(prev + 4, 85));
+      }, 400);
+
+      const result = await uploadExcel(file);
+      clearInterval(progressInterval);
+
+      if (result.success) {
+        setProcessProgress(100);
+        setExcelResult(result);
+        setSyncResult(result);
+        setExtractedData([]);
+
+        const upload = {
+          id: `upload-${Date.now()}`,
+          type: "excel",
+          branch: Object.keys(result.branches || {}).join(", "),
+          source: file.name,
+          extractedData: [],
+          timestamp: new Date().toISOString(),
+        };
+        saveUpload(upload);
+
+        console.log(`✅ Excel uploaded: ${result.totalItems} items across ${Object.keys(result.branches || {}).length} branches`);
+        setTimeout(() => setMode("success"), 500);
+      } else {
+        throw new Error(result.error || "Upload failed");
+      }
+    } catch (err) {
+      console.error("[UploadModal] Excel upload failed:", err.message);
+      setApiError(err.message);
+      setMode("error");
+    }
+
+    if (excelInputRef.current) excelInputRef.current.value = "";
+  }
+
+  /* ─── Branch selected → process data (image/camera only) ─── */
+  async function handleBranchSelect(branchName) {
     setSelectedBranch(branchName);
     setMode("processing");
+    setProcessProgress(0);
+    setApiError("");
 
-    // Simulate OCR / Sheet processing
+    // Mock processing for image/camera (OCR not implemented yet)
     let progress = 0;
     const interval = setInterval(() => {
       progress += Math.random() * 25 + 10;
@@ -191,26 +314,20 @@ export function UploadModal({ open, onOpenChange, onComplete, branches = [] }) {
         clearInterval(interval);
         setProcessProgress(100);
 
-        // Generate mock extracted data
         const shuffled = [...OCR_MOCK_RESULTS].sort(() => Math.random() - 0.5);
         const cnt = 2 + Math.floor(Math.random() * 3);
         const extracted = shuffled.slice(0, cnt).map((d) => ({ ...d, branch: branchName }));
         setExtractedData(extracted);
 
-        console.log(`🎙️ [Upload] Type: ${uploadType}, Branch: ${branchName}`);
-        console.log("📦 Extracted data:", extracted);
-
-        // Save to session storage
         const upload = {
           id: `upload-${Date.now()}`,
           type: uploadType,
           branch: branchName,
-          source: uploadType === "sheet" ? sheetLink : uploadedImages.map((i) => i.name).join(", "),
+          source: uploadedImages.map((i) => i.name).join(", "),
           extractedData: extracted,
           timestamp: new Date().toISOString(),
         };
-        const allUploads = saveUpload(upload);
-        console.log("💾 All uploads:", allUploads);
+        saveUpload(upload);
 
         setTimeout(() => setMode("success"), 500);
       }
@@ -245,6 +362,13 @@ export function UploadModal({ open, onOpenChange, onComplete, branches = [] }) {
           className="hidden"
           onChange={handleImageSelect}
         />
+        <input
+          ref={excelInputRef}
+          type="file"
+          accept=".xlsx,.xls,.csv"
+          className="hidden"
+          onChange={handleExcelSelect}
+        />
         <canvas ref={canvasRef} className="hidden" />
 
         <DialogHeader className="border-b border-border/40 bg-gradient-to-r from-primary/5 via-white/80 to-violet-500/5 px-6 py-5">
@@ -256,6 +380,7 @@ export function UploadModal({ open, onOpenChange, onComplete, branches = [] }) {
              mode === "camera" ? "Capture Image" :
              mode === "branch" ? "Select Branch" :
              mode === "processing" ? "Processing..." :
+             mode === "error" ? "Error" :
              "Success!"}
           </DialogTitle>
           <DialogDescription>
@@ -263,8 +388,10 @@ export function UploadModal({ open, onOpenChange, onComplete, branches = [] }) {
              mode === "sheet" ? "Paste your Google Sheet link below" :
              mode === "camera" ? "Point your camera at the ledger or invoice" :
              mode === "branch" ? "Which branch does this data belong to?" :
-             mode === "processing" ? "Analyzing your data with AI..." :
-             mode === "success" ? "Data extracted successfully" :
+             mode === "processing" && uploadType === "excel" ? "Parsing Excel sheets and mapping branches..." :
+             mode === "processing" ? "Fetching and analyzing your real data..." :
+             mode === "error" ? "Something went wrong" :
+             mode === "success" ? "Data extracted and synced successfully" :
              "Select images from your device"}
           </DialogDescription>
         </DialogHeader>
@@ -291,7 +418,7 @@ export function UploadModal({ open, onOpenChange, onComplete, branches = [] }) {
                   <div className="text-center">
                     <p className="text-base font-bold">Google Sheets</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Paste your sheet link
+                      Paste link — branches auto-detected from tabs
                     </p>
                   </div>
                 </button>
@@ -315,16 +442,28 @@ export function UploadModal({ open, onOpenChange, onComplete, branches = [] }) {
                 {/* Camera Capture */}
                 <button
                   onClick={startCamera}
-                  className="group relative flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-emerald-400/20 bg-white/60 p-8 transition-all duration-300 hover:bg-emerald-500/3 hover:border-emerald-500/40 hover:shadow-lg cursor-pointer sm:col-span-2"
+                  className="group relative flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-emerald-400/20 bg-white/60 p-8 transition-all duration-300 hover:bg-emerald-500/3 hover:border-emerald-500/40 hover:shadow-lg cursor-pointer"
                 >
-                  <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/15 to-teal-500/15 text-emerald-700 shadow-sm transition-transform duration-300 group-hover:scale-110">
-                    <Camera className="size-7" strokeWidth={1.5} />
+                  <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/15 to-teal-500/15 text-emerald-700 shadow-sm transition-transform duration-300 group-hover:scale-110">
+                    <Camera className="size-8" strokeWidth={1.5} />
                   </span>
                   <div className="text-center">
                     <p className="text-base font-bold">Use Camera</p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       Capture live image of your ledger
                     </p>
+                  </div>
+                </button>
+
+                {/* Excel fallback — secondary option */}
+                <button
+                  onClick={() => excelInputRef.current?.click()}
+                  className="group flex items-center gap-3 rounded-xl border border-dashed border-border/40 bg-white/40 px-4 py-3 transition-all hover:bg-white/70 hover:border-border/60 cursor-pointer sm:col-span-2"
+                >
+                  <FileSpreadsheet className="size-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                  <div className="text-left">
+                    <p className="text-sm font-semibold">Have a local Excel file?</p>
+                    <p className="text-[10px] text-muted-foreground">Upload .xlsx — each sheet name becomes a branch</p>
                   </div>
                 </button>
               </motion.div>
@@ -342,7 +481,7 @@ export function UploadModal({ open, onOpenChange, onComplete, branches = [] }) {
                 <div className="flex items-center gap-3 rounded-xl bg-primary/5 border border-primary/10 px-4 py-3">
                   <FileSpreadsheet className="size-5 text-primary shrink-0" />
                   <p className="text-xs text-primary font-medium">
-                    Make sure the sheet has <strong>public view access</strong> enabled
+                    Make sure the sheet has <strong>public view access</strong>. Multiple tabs? Each tab name becomes a <strong>branch</strong> automatically.
                   </p>
                 </div>
 
@@ -427,11 +566,6 @@ export function UploadModal({ open, onOpenChange, onComplete, branches = [] }) {
                 </div>
 
                 {/* Show uploaded source */}
-                {uploadType === "sheet" && sheetLink && (
-                  <div className="rounded-lg bg-primary/5 px-3 py-2 text-xs text-primary font-medium truncate">
-                    📊 {sheetLink}
-                  </div>
-                )}
                 {(uploadType === "image" || uploadType === "camera") && uploadedImages.length > 0 && (
                   <div className="rounded-lg bg-violet-500/5 px-3 py-2 text-xs text-violet-700 font-medium">
                     📸 {uploadedImages.length} image{uploadedImages.length > 1 ? "s" : ""} ready
@@ -453,6 +587,10 @@ export function UploadModal({ open, onOpenChange, onComplete, branches = [] }) {
                       <span className="text-sm font-bold group-hover:text-primary transition-colors">{b}</span>
                     </button>
                   ))}
+                </div>
+
+                <div className="text-center text-[10px] text-muted-foreground">
+                  Note: If the sheet has an Outlet/Location column, items will be auto-assigned to their branches
                 </div>
 
                 <Button variant="outline" className="rounded-full" onClick={() => setMode("choose")}>
@@ -481,13 +619,31 @@ export function UploadModal({ open, onOpenChange, onComplete, branches = [] }) {
 
                 <div className="text-center space-y-1">
                   <p className="text-sm font-bold">
-                    {processProgress < 40 ? "Scanning data..." :
-                     processProgress < 70 ? "Extracting fields..." :
-                     processProgress < 100 ? "Analyzing with AI..." :
-                     "Complete!"}
+                    {uploadType === "excel"
+                      ? processProgress < 20 ? "Reading Excel file..." :
+                        processProgress < 40 ? "Detecting sheet names (branches)..." :
+                        processProgress < 60 ? "Mapping rows to branches..." :
+                        processProgress < 80 ? "Storing in database..." :
+                        processProgress < 100 ? "Running AI analysis & alerts..." :
+                        "Complete!"
+                      : uploadType === "sheet"
+                      ? processProgress < 15 ? "Connecting to Google Sheets..." :
+                        processProgress < 35 ? "Detecting tabs & branches..." :
+                        processProgress < 55 ? "Fetching real data from all tabs..." :
+                        processProgress < 75 ? "Parsing & storing in database..." :
+                        processProgress < 100 ? "Running AI analysis & alerts..." :
+                        "Complete!"
+                      : processProgress < 40 ? "Scanning data..." :
+                        processProgress < 70 ? "Extracting fields..." :
+                        processProgress < 100 ? "Analyzing with AI..." :
+                        "Complete!"}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Processing for <strong>{selectedBranch}</strong>
+                    {uploadType === "excel"
+                      ? <>Uploading <strong>{excelFile?.name}</strong></>
+                      : uploadType === "sheet"
+                      ? <>Auto-detecting branches from sheet tabs</>
+                      : <>Processing for <strong>{selectedBranch}</strong></>}
                   </p>
                 </div>
 
@@ -508,6 +664,37 @@ export function UploadModal({ open, onOpenChange, onComplete, branches = [] }) {
               </motion.div>
             )}
 
+            {/* ─── ERROR ─── */}
+            {mode === "error" && (
+              <motion.div
+                key="error"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-5"
+              >
+                <div className="flex items-center gap-3 rounded-xl bg-red-50 border border-red-200/60 px-4 py-3">
+                  <AlertTriangle className="size-5 text-red-600 shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-red-700">Failed to sync sheet</p>
+                    <p className="text-xs text-red-600 mt-0.5">{apiError}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Button variant="outline" className="rounded-full" onClick={resetState}>
+                    Try Again
+                  </Button>
+                  <Button
+                    className="rounded-full flex-1"
+                    onClick={() => handleBranchSelect(selectedBranch)}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+
             {/* ─── SUCCESS ─── */}
             {mode === "success" && (
               <motion.div
@@ -521,32 +708,89 @@ export function UploadModal({ open, onOpenChange, onComplete, branches = [] }) {
                 <div className="flex items-center gap-3 rounded-xl bg-emerald-50 border border-emerald-200/60 px-4 py-3">
                   <CheckCircle2 className="size-5 text-emerald-600 shrink-0" />
                   <div>
-                    <p className="text-sm font-bold text-emerald-700">Data extracted successfully!</p>
+                    <p className="text-sm font-bold text-emerald-700">
+                      {excelResult?.branches
+                        ? `${uploadType === "excel" ? "Excel" : "Sheet"} synced — ${Object.keys(excelResult.branches).length} branches detected!`
+                        : uploadType === "sheet" ? "Sheet synced successfully!"
+                        : "Data extracted successfully!"}
+                    </p>
                     <p className="text-xs text-emerald-600">
-                      {extractedData.length} items found for <strong>{selectedBranch}</strong>
+                      {excelResult?.branches
+                        ? <>{excelResult.totalItems || syncResult?.itemsUpserted} items across {Object.keys(excelResult.branches).length} branch(es)
+                            {syncResult?.alerts > 0 && <> · {syncResult.alerts} alerts</>}</>
+                        : <>{extractedData.length} items found for <strong>{selectedBranch}</strong>
+                            {syncResult?.alerts > 0 && <> · {syncResult.alerts} alerts generated</>}</>}
                     </p>
                   </div>
                 </div>
 
-                {/* Extracted data preview */}
+                {/* Multi-branch breakdown (for both Excel and multi-tab Google Sheets) */}
+                {excelResult?.branches && Object.keys(excelResult.branches).length > 0 && (
+                  <div className="rounded-xl border border-border/40 overflow-hidden">
+                    <div className="bg-emerald-50/50 px-4 py-2 border-b border-border/20">
+                      <p className="text-xs font-bold text-emerald-800">
+                        Branch Breakdown (auto-detected from {uploadType === "excel" ? "sheet names" : "tab names"})
+                      </p>
+                    </div>
+                    <div className="divide-y divide-border/20">
+                      {Object.entries(excelResult.branches).map(([branch, info]) => (
+                        <div key={branch} className="flex items-center justify-between px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <MapPin className="size-3.5 text-primary" />
+                            <p className="text-sm font-bold">{branch}</p>
+                          </div>
+                          <span className="text-xs font-bold text-primary">
+                            {typeof info === "number" ? info : info.upserted} items
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Auto-sync badge */}
+                {uploadType === "sheet" && (
+                  <div className="flex items-center gap-2 rounded-lg bg-primary/5 border border-primary/10 px-3 py-2">
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                    </span>
+                    <p className="text-[10px] font-medium text-primary">
+                      Auto-sync enabled — your sheet will sync every 60 seconds automatically
+                    </p>
+                  </div>
+                )}
+
+                {/* Extracted data preview (for sheet/image/camera) */}
+                {uploadType !== "excel" && extractedData.length > 0 && (
                 <div className="rounded-xl border border-border/40 overflow-hidden">
                   <div className="bg-muted/30 px-4 py-2 border-b border-border/20">
-                    <p className="text-xs font-bold text-muted-foreground">Extracted Data Preview</p>
+                    <p className="text-xs font-bold text-muted-foreground">
+                      {uploadType === "sheet" ? "Synced Data Preview" : "Extracted Data Preview"}
+                    </p>
                   </div>
-                  <div className="divide-y divide-border/20">
-                    {extractedData.map((item, i) => (
+                  <div className="divide-y divide-border/20 max-h-[250px] overflow-y-auto">
+                    {extractedData.slice(0, 15).map((item, i) => (
                       <div key={i} className="flex items-center justify-between px-4 py-2.5">
                         <div>
                           <p className="text-xs font-semibold">{item.product}</p>
                           <p className="text-[10px] text-muted-foreground">
+                            {item.category ? `${item.category} · ` : ""}
                             Expires in {item.expiry} · ₹{item.price}
+                            {item.branch && item.branch !== selectedBranch ? ` · 📍 ${item.branch}` : ""}
                           </p>
                         </div>
                         <span className="text-xs font-bold text-primary">{item.quantity} units</span>
                       </div>
                     ))}
+                    {extractedData.length > 15 && (
+                      <div className="px-4 py-2 text-center text-[10px] text-muted-foreground">
+                        + {extractedData.length - 15} more items
+                      </div>
+                    )}
                   </div>
                 </div>
+                )}
 
                 <div className="flex items-center gap-3">
                   <Button

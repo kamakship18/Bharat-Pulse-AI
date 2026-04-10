@@ -2,7 +2,7 @@ const Alert = require("../models/Alert");
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const EXPIRY_WARNING_DAYS = 3; // Alert when expiry is within this many days
+const EXPIRY_WARNING_DAYS = 5; // Alert when expiry is within this many days
 
 /**
  * Maps alert type → severity level.
@@ -57,7 +57,7 @@ function evaluateRules(item) {
     });
   }
 
-  // ── Rule 4: Expiring Soon ─────────────────────────────────────────────────
+  // ── Rule 4: Expiring Soon (≤ 5 days) ───────────────────────────────────────
   if (item.expiryDate) {
     const expiry   = new Date(item.expiryDate);
     const now      = new Date();
@@ -67,7 +67,8 @@ function evaluateRules(item) {
     if (diffDays <= EXPIRY_WARNING_DAYS && diffDays >= 0) {
       triggered.push({
         type:            "expiring_soon",
-        message:         `⏰ ${name} expires in ${diffDays} day(s) (${expiry.toDateString()}).`,
+        severity:        diffDays <= 2 ? "critical" : "warning",
+        message:         `⏰ ${qty} ${name} expiring in ${diffDays} day(s) (${expiry.toDateString()}).`,
         quantityAtAlert: qty,
         expiryDateAtAlert: expiry,
       });
@@ -75,17 +76,18 @@ function evaluateRules(item) {
       // Already expired — escalate to critical
       triggered.push({
         type:            "expiring_soon",
-        message:         `🗑️ ${name} has already expired (${expiry.toDateString()}).`,
+        severity:        "critical",
+        message:         `🗑️ ${name} has already expired (${expiry.toDateString()}). ${qty} units at risk.`,
         quantityAtAlert: qty,
         expiryDateAtAlert: expiry,
       });
     }
   }
 
-  // Attach severity to each triggered alert
+  // Attach severity to each triggered alert (unless already set)
   return triggered.map((a) => ({
     ...a,
-    severity: SEVERITY_MAP[a.type] || "info",
+    severity: a.severity || SEVERITY_MAP[a.type] || "info",
   }));
 }
 
@@ -119,6 +121,8 @@ async function runForItem(item) {
           inventoryItemId:    item._id,
           productId:          item.productId,
           productName:        item.name,
+          branch:             item.branch || "Main",
+          userId:             item.userId || null,
           type:               alertData.type,
           severity:           alertData.severity,
           message:            alertData.message,
@@ -174,4 +178,4 @@ async function runForAll(items) {
   return allAlerts;
 }
 
-module.exports = { runForItem, runForAll, evaluateRules };
+module.exports = { runForItem, runForAll, evaluateRules, EXPIRY_WARNING_DAYS };

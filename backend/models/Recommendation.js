@@ -18,6 +18,15 @@ const RecommendationSchema = new mongoose.Schema(
     productId:   { type: String, required: true, index: true },
     productName: { type: String, required: true },
 
+    // ── Scope ─────────────────────────────────────────────────────────────────
+    branch: { type: String, default: "Main", trim: true, index: true },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      index: true,
+      default: null,
+    },
+
     // ── AI output ─────────────────────────────────────────────────────────────
     type: {
       type: String,

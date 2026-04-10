@@ -19,6 +19,15 @@ const AlertSchema = new mongoose.Schema(
     productId:   { type: String, required: true, index: true },
     productName: { type: String, required: true },
 
+    // ── Scope ─────────────────────────────────────────────────────────────────
+    branch: { type: String, default: "Main", trim: true, index: true },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      index: true,
+      default: null,
+    },
+
     // ── Alert classification ──────────────────────────────────────────────────
     type: {
       type: String,
@@ -39,6 +48,9 @@ const AlertSchema = new mongoose.Schema(
     // Lifecycle
     resolved: { type: Boolean, default: false, index: true },
     resolvedAt: { type: Date, default: null },
+
+    // WhatsApp notification tracking
+    notifiedVia: { type: [String], default: [] }, // ["whatsapp", "inapp"]
   },
   {
     timestamps: true,

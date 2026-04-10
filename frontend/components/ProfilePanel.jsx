@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { Building2, MapPin, Sparkles, Settings, Database } from "lucide-react";
+import { Building2, MapPin, Sparkles, Settings, Database, Truck } from "lucide-react";
 
 const FEATURE_LABELS = {
   expiry: { label: "Expiry Alerts", emoji: "⏰" },
@@ -22,6 +23,8 @@ export function ProfilePanel({
   location = "Punjab, India",
   businessType = "Kirana / General store",
   features = {},
+  distributorName = "",
+  onEditProfile,
   className,
 }) {
   const active = Object.entries(features)
@@ -41,7 +44,6 @@ export function ProfilePanel({
 
         <CardHeader className="-mt-10 pb-3">
           <div className="flex items-start gap-3">
-            {/* Avatar */}
             <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-violet-600 text-2xl font-black text-white shadow-lg ring-4 ring-white">
               {businessName?.slice(0, 1)?.toUpperCase() ?? "B"}
             </span>
@@ -61,6 +63,17 @@ export function ProfilePanel({
             <Building2 className="size-4 text-primary" />
             <span className="font-bold text-primary">{businessType}</span>
           </div>
+
+          {/* Distributor */}
+          {distributorName && (
+            <div className="flex items-center gap-2 rounded-xl bg-violet-50 border border-violet-200/40 px-3 py-2.5">
+              <Truck className="size-4 text-violet-600" />
+              <div>
+                <p className="text-[10px] font-bold uppercase text-muted-foreground">Distributor</p>
+                <p className="text-xs font-bold text-violet-700">{distributorName}</p>
+              </div>
+            </div>
+          )}
 
           {/* Features */}
           <div>
@@ -83,16 +96,14 @@ export function ProfilePanel({
           <Separator />
 
           <div className="flex flex-col gap-2">
-            <Link
-              href="/onboarding"
-              className={cn(
-                buttonVariants({ variant: "outline" }),
-                "w-full justify-center rounded-full bg-white/70 backdrop-blur-sm transition-all hover:bg-white hover:shadow-md"
-              )}
+            <Button
+              variant="outline"
+              className="w-full justify-center rounded-full bg-white/70 backdrop-blur-sm transition-all hover:bg-white hover:shadow-md"
+              onClick={onEditProfile}
             >
               <Settings className="mr-2 size-3.5" />
               Edit profile
-            </Link>
+            </Button>
             <Link
               href="/manage-data"
               className={cn(

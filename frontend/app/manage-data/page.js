@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -19,13 +19,12 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { UploadModal, UPLOAD_STORAGE_KEY, getStoredUploads } from "@/components/UploadModal";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth-context";
-import { addUpload } from "@/lib/api";
+import { addUpload, getInventoryByBranch, syncAllSheets } from "@/lib/api";
 import {
   productInventory,
-  BRANCH_OPTIONS,
   STOCK_FILTERS,
-  CATEGORY_FILTERS,
   aiChatMessages,
+  mapInventoryItem,
 } from "@/lib/manage-data";
 import {
   Database,
@@ -45,12 +44,10 @@ import {
   Link2,
   Camera,
   ImageIcon,
-  FileSpreadsheet,
-  Trash2,
-  Eye,
   ChevronDown,
   ChevronUp,
   LogOut,
+  RefreshCw,
 } from "lucide-react";
 
 /* ─── Status helpers ─── */
@@ -88,6 +85,7 @@ function getStatusConfig(status) {
 }
 
 function daysUntil(dateStr) {
+  if (!dateStr) return Infinity;
   const now = new Date();
   const target = new Date(dateStr);
   const diff = Math.ceil((target - now) / (1000 * 60 * 60 * 24));
@@ -140,7 +138,9 @@ function ProductCard({ product, index }) {
               ? days <= 0 ? "Expired!" : `Expires in ${days} day${days > 1 ? "s" : ""}`
               : product.status === "low-stock"
               ? "Restock needed"
-              : `Valid until ${new Date(product.expiryDate).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}`}
+              : product.expiryDate
+              ? `Valid until ${new Date(product.expiryDate).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}`
+              : "No expiry"}
           </span>
         </div>
         <span className="text-xs font-bold text-foreground">₹{product.price}</span>
@@ -154,7 +154,6 @@ function ProductCard({ product, index }) {
 function UploadSourcesPanel({ uploads, onAddMore }) {
   const [expandedBranch, setExpandedBranch] = useState(null);
 
-  // Group by branch
   const grouped = useMemo(() => {
     const map = {};
     uploads.forEach((u) => {
@@ -472,9 +471,17 @@ function ManageDataContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [uploads, setUploads] = useState([]);
-  const [activeTab, setActiveTab] = useState("inventory"); // inventory | sources
+  const [activeTab, setActiveTab] = useState("inventory");
 
-  // Load uploads: backend user data first, then sessionStorage fallback
+  // ── REAL DATA STATE ─────────────────────────────────────────────────────────
+  const [realProducts, setRealProducts] = useState(null);
+  const [realBranches, setRealBranches] = useState(null);
+  const [realCategories, setRealCategories] = useState(null);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastSynced, setLastSynced] = useState(null);
+
+  // Load uploads from backend user data or sessionStorage
   useEffect(() => {
     if (user?.uploads?.length > 0) {
       setUploads(user.uploads.map((u) => ({
@@ -490,8 +497,61 @@ function ManageDataContent() {
     }
   }, [user, modalOpen]);
 
+  // ── Fetch real inventory data from API ────────────────────────────────────
+  const fetchRealData = useCallback(async (showLoading = false) => {
+    if (showLoading) setDataLoading(true);
+    try {
+      const res = await getInventoryByBranch();
+      if (res?.success && res.total > 0) {
+        const allItems = Object.values(res.grouped || {}).flat();
+        const mapped = allItems.map(mapInventoryItem);
+        setRealProducts(mapped);
+
+        const branchList = res.branches || [];
+        setRealBranches(["All Branches", ...branchList]);
+
+        const cats = new Set();
+        mapped.forEach((p) => { if (p.category) cats.add(p.category); });
+        setRealCategories(["All", ...Array.from(cats).sort()]);
+
+        const latest = allItems.reduce((max, item) => {
+          const t = new Date(item.lastSyncedAt || item.updatedAt || 0);
+          return t > max ? t : max;
+        }, new Date(0));
+        if (latest.getTime() > 0) setLastSynced(latest);
+      }
+    } catch (err) {
+      console.warn("[ManageData] Failed to fetch real data:", err.message);
+    } finally {
+      setDataLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRealData(true);
+    const interval = setInterval(() => fetchRealData(false), 60_000);
+    return () => clearInterval(interval);
+  }, [fetchRealData]);
+
+  const handleManualRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await syncAllSheets();
+      await fetchRealData(false);
+    } catch (err) {
+      console.warn("[ManageData] Manual refresh failed:", err.message);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // ── Use real data if available, otherwise fallback to static ──────────────
+  const allProducts = realProducts || productInventory;
+  const branchOptions = realBranches || ["All Branches", "Rajpura", "Chandigarh", "Pinjore"];
+  const categoryOptions = realCategories || ["All", "Dairy", "Bakery", "Groceries", "Snacks", "Cold drinks"];
+
   const filteredProducts = useMemo(() => {
-    return productInventory.filter((p) => {
+    return allProducts.filter((p) => {
       if (branch !== "All Branches" && p.branch !== branch) return false;
       if (stockFilter === "Low Stock" && p.status !== "low-stock") return false;
       if (stockFilter === "Expiring Soon" && p.status !== "expiring") return false;
@@ -500,17 +560,19 @@ function ManageDataContent() {
       if (searchQuery && !p.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       return true;
     });
-  }, [branch, stockFilter, categoryFilter, searchQuery]);
+  }, [allProducts, branch, stockFilter, categoryFilter, searchQuery]);
 
   const stats = useMemo(() => {
-    const filtered = branch === "All Branches" ? productInventory : productInventory.filter((p) => p.branch === branch);
+    const filtered = branch === "All Branches" ? allProducts : allProducts.filter((p) => p.branch === branch);
     return {
       total: filtered.length,
       expiring: filtered.filter((p) => p.status === "expiring").length,
       lowStock: filtered.filter((p) => p.status === "low-stock").length,
       healthy: filtered.filter((p) => p.status === "healthy").length,
     };
-  }, [branch]);
+  }, [allProducts, branch]);
+
+  const isLive = realProducts !== null;
 
   return (
     <div className="min-h-screen page-gradient">
@@ -558,7 +620,7 @@ function ManageDataContent() {
       <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 lg:grid-cols-[1fr_380px] lg:items-start lg:px-6">
         {/* LEFT — Data Panel */}
         <div className="min-w-0 space-y-6">
-          {/* Page Title + Branch Selector */}
+          {/* Page Title + Branch Selector + Sync Status */}
           <motion.div
             className="flex flex-wrap items-end justify-between gap-4"
             initial={{ opacity: 0, y: 12 }}
@@ -569,22 +631,55 @@ function ManageDataContent() {
               <h2 className="font-heading text-2xl font-extrabold tracking-tight sm:text-3xl">
                 Your Business Data
               </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Monitor inventory, track expiry, and manage stock across branches
-              </p>
+              <div className="mt-1 flex items-center gap-3">
+                <p className="text-sm text-muted-foreground">
+                  Monitor inventory, track expiry, and manage stock across branches
+                </p>
+                {isLive && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    </span>
+                    Live
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="w-48">
-              <Select value={branch} onValueChange={setBranch}>
-                <SelectTrigger className="rounded-xl bg-white/80 shadow-sm text-xs font-semibold">
-                  <MapPin className="mr-1.5 size-3.5 text-primary" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {BRANCH_OPTIONS.map((b) => (
-                    <SelectItem key={b} value={b}>{b}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex items-center gap-2">
+              {lastSynced && (
+                <div className="text-right">
+                  <p className="text-[10px] font-bold text-muted-foreground">Last synced</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {lastSynced.toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })}
+                  </p>
+                </div>
+              )}
+              {isLive && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full text-xs bg-white/70 hover:bg-white"
+                  onClick={handleManualRefresh}
+                  disabled={refreshing}
+                >
+                  <RefreshCw className={`mr-1 size-3 ${refreshing ? "animate-spin" : ""}`} />
+                  {refreshing ? "Syncing..." : "Refresh"}
+                </Button>
+              )}
+              <div className="w-48">
+                <Select value={branch} onValueChange={setBranch}>
+                  <SelectTrigger className="rounded-xl bg-white/80 shadow-sm text-xs font-semibold">
+                    <MapPin className="mr-1.5 size-3.5 text-primary" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {branchOptions.map((b) => (
+                      <SelectItem key={b} value={b}>{b}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </motion.div>
 
@@ -659,7 +754,7 @@ function ManageDataContent() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {CATEGORY_FILTERS.map((f) => (
+                        {categoryOptions.map((f) => (
                           <SelectItem key={f} value={f}>{f}</SelectItem>
                         ))}
                       </SelectContent>
@@ -673,6 +768,7 @@ function ManageDataContent() {
                 <div className="mb-3 flex items-center justify-between">
                   <p className="text-xs font-bold text-muted-foreground">
                     {filteredProducts.length} product{filteredProducts.length !== 1 ? "s" : ""} found
+                    {isLive && <span className="ml-1 text-emerald-600">(live)</span>}
                   </p>
                   {(stockFilter !== "All" || categoryFilter !== "All" || searchQuery) && (
                     <button
@@ -684,24 +780,33 @@ function ManageDataContent() {
                   )}
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <AnimatePresence mode="popLayout">
-                    {filteredProducts.map((product, index) => (
-                      <ProductCard key={product.id} product={product} index={index} />
-                    ))}
-                  </AnimatePresence>
-                </div>
+                {dataLoading && !realProducts ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <RefreshCw className="size-8 text-primary/30 animate-spin mb-3" />
+                    <p className="text-sm font-semibold text-muted-foreground">Loading inventory data...</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <AnimatePresence mode="popLayout">
+                        {filteredProducts.map((product, index) => (
+                          <ProductCard key={product.id} product={product} index={index} />
+                        ))}
+                      </AnimatePresence>
+                    </div>
 
-                {filteredProducts.length === 0 && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="flex flex-col items-center justify-center py-16 text-center"
-                  >
-                    <Package className="size-12 text-muted-foreground/30 mb-3" />
-                    <p className="text-sm font-semibold text-muted-foreground">No products match your filters</p>
-                    <p className="text-xs text-muted-foreground/70 mt-1">Try adjusting your search or filters</p>
-                  </motion.div>
+                    {filteredProducts.length === 0 && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="flex flex-col items-center justify-center py-16 text-center"
+                      >
+                        <Package className="size-12 text-muted-foreground/30 mb-3" />
+                        <p className="text-sm font-semibold text-muted-foreground">No products match your filters</p>
+                        <p className="text-xs text-muted-foreground/70 mt-1">Try adjusting your search or filters</p>
+                      </motion.div>
+                    )}
+                  </>
                 )}
               </div>
             </>
@@ -724,6 +829,8 @@ function ManageDataContent() {
         onComplete={async (uploadData) => {
           setUploads(getStoredUploads());
           setModalOpen(false);
+          // Refresh real data after upload
+          await fetchRealData(true);
           if (uploadData) {
             try {
               await addUpload(uploadData);

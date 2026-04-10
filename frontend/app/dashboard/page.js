@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -11,18 +11,32 @@ import { AlertCard } from "@/components/AlertCard";
 import { RecommendationCard } from "@/components/RecommendationCard";
 import { ProfilePanel } from "@/components/ProfilePanel";
 import { UploadModal } from "@/components/UploadModal";
+import { NotificationPanel } from "@/components/NotificationPanel";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth-context";
-import { addUpload, getPrediction } from "@/lib/api";
+import {
+  addUpload,
+  getPrediction,
+  getInventorySummary,
+  getAlerts,
+  getRecommendations,
+  getNotifications,
+  getTransferSuggestions,
+  syncAllSheets,
+} from "@/lib/api";
+import { EditProfileModal } from "@/components/EditProfileModal";
+import { AutoRestockModal } from "@/components/AutoRestockModal";
+import { BranchSwapModal } from "@/components/BranchSwapModal";
+import { WhatsAppActivityPanel } from "@/components/WhatsAppActivityPanel";
 import {
   salesTrend,
-  stockByBranch,
-  categoryBreakdown,
+  stockByBranch as staticStockByBranch,
+  categoryBreakdown as staticCategoryBreakdown,
   demoAlerts,
   demoRecommendations,
   demandTrending,
-  branchComparison,
-  stockHealth,
+  branchComparison as staticBranchComparison,
+  stockHealth as staticStockHealth,
   fallbackPrediction,
   STORAGE_KEY,
 } from "@/lib/mock-data";
@@ -48,6 +62,7 @@ import {
   Calendar,
   Zap,
   RefreshCw,
+  ArrowRightLeft,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 
@@ -63,16 +78,23 @@ const defaultProfile = {
     ocr: true,
     multi: true,
   },
+  distributorName: "",
+  distributorPhone: "",
 };
 
 /* ─── Stock Health Card ─── */
-function StockHealthPanel() {
+function StockHealthPanel({ data }) {
+  const health = data || staticStockHealth;
   const items = [
-    { label: "Total Products", value: stockHealth.totalProducts, icon: Package, color: "text-primary", bg: "bg-primary/5" },
-    { label: "Expiring Soon", value: stockHealth.expiringItems, icon: Clock, color: "text-red-600", bg: "bg-red-50" },
-    { label: "Low Stock", value: stockHealth.lowStockItems, icon: AlertTriangle, color: "text-amber-600", bg: "bg-amber-50" },
-    { label: "Healthy", value: stockHealth.healthyItems, icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-50" },
+    { label: "Total Products", value: health.totalItems || health.totalProducts || 0, icon: Package, color: "text-primary", bg: "bg-primary/5" },
+    { label: "Expiring Soon", value: health.expiringSoon || health.expiringItems || 0, icon: Clock, color: "text-red-600", bg: "bg-red-50" },
+    { label: "Low Stock", value: (health.lowStock || health.lowStockItems || 0) + (health.outOfStock || health.outOfStockItems || 0), icon: AlertTriangle, color: "text-amber-600", bg: "bg-amber-50" },
+    { label: "Healthy", value: health.healthy || health.healthyItems || 0, icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-50" },
   ];
+
+  const totalValue = health.totalValue || 0;
+  const totalUnits = health.totalUnits || health.totalProducts || 0;
+  const branchCount = health.branches ? Object.keys(health.branches).length : 0;
 
   return (
     <Card className="overflow-hidden rounded-2xl border-white/50 bg-white/70 shadow-lg backdrop-blur-md">
@@ -104,11 +126,15 @@ function StockHealthPanel() {
           <BarChart3 className="size-4 text-primary" />
           <div>
             <p className="text-xs font-bold text-primary">Total Inventory Value</p>
-            <p className="text-lg font-extrabold text-foreground">{stockHealth.totalValue}</p>
+            <p className="text-lg font-extrabold text-foreground">
+              ₹{typeof totalValue === "number" ? totalValue.toLocaleString("en-IN") : totalValue}
+            </p>
           </div>
           <div className="ml-auto text-right">
-            <p className="text-xs font-bold text-muted-foreground">{stockHealth.totalUnits} units</p>
-            <p className="text-[10px] text-muted-foreground">across 3 branches</p>
+            <p className="text-xs font-bold text-muted-foreground">{totalUnits} units</p>
+            <p className="text-[10px] text-muted-foreground">
+              across {branchCount || "—"} branch{branchCount !== 1 ? "es" : ""}
+            </p>
           </div>
         </div>
       </CardContent>
@@ -117,12 +143,32 @@ function StockHealthPanel() {
 }
 
 /* ─── Branch Comparison ─── */
-function BranchComparisonPanel() {
+function BranchComparisonPanel({ data }) {
   const riskColors = {
     red: { bg: "bg-red-50", text: "text-red-600", border: "border-red-200/40" },
     amber: { bg: "bg-amber-50", text: "text-amber-600", border: "border-amber-200/40" },
     green: { bg: "bg-emerald-50", text: "text-emerald-600", border: "border-emerald-200/40" },
   };
+
+  // Build from real data or fall back to static
+  const branches = data
+    ? Object.entries(data).map(([name, stats]) => {
+        const riskScore = stats.expiringItems > 2 || stats.lowStockItems > 2 ? "High" :
+                          stats.expiringItems > 0 || stats.lowStockItems > 0 ? "Medium" : "Low";
+        const riskColor = riskScore === "High" ? "red" : riskScore === "Medium" ? "amber" : "green";
+        return {
+          branch: name,
+          totalStock: stats.units || stats.totalStock || 0,
+          expiringItems: stats.expiringItems || 0,
+          lowStockItems: stats.lowStockItems || 0,
+          riskScore,
+          riskColor,
+          revenue: `₹${(stats.totalValue || 0).toLocaleString("en-IN")}`,
+        };
+      })
+    : staticBranchComparison;
+
+  if (branches.length === 0) return null;
 
   return (
     <Card className="overflow-hidden rounded-2xl border-white/50 bg-white/70 shadow-lg backdrop-blur-md">
@@ -133,8 +179,8 @@ function BranchComparisonPanel() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {branchComparison.map((b) => {
-          const rc = riskColors[b.riskColor];
+        {branches.map((b) => {
+          const rc = riskColors[b.riskColor] || riskColors.green;
           return (
             <div
               key={b.branch}
@@ -159,7 +205,7 @@ function BranchComparisonPanel() {
                   <p className={`text-sm font-bold ${b.expiringItems > 0 ? "text-red-600" : "text-emerald-600"}`}>{b.expiringItems}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground">Revenue</p>
+                  <p className="text-[10px] text-muted-foreground">Value</p>
                   <p className="text-sm font-bold text-primary">{b.revenue}</p>
                 </div>
               </div>
@@ -259,7 +305,7 @@ function PredictiveDemandPanel({ insights }) {
       <CardContent className="space-y-2.5">
         {items.map((item, i) => (
           <motion.div
-            key={item.product}
+            key={`${item.product}_${i}`}
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.08 }}
@@ -289,6 +335,23 @@ function DashboardContent() {
   const [prediction, setPrediction] = useState(null);
   const [predictionLoading, setPredictionLoading] = useState(false);
 
+  // ── REAL DATA STATE ─────────────────────────────────────────────────────────
+  const [summary, setSummary] = useState(null);
+  const [realAlerts, setRealAlerts] = useState(null);
+  const [realRecommendations, setRealRecommendations] = useState(null);
+  const [lastSynced, setLastSynced] = useState(null);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // ── NEW: Edit Profile, Restock, Transfer state ───────────────────────────
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [restockModalOpen, setRestockModalOpen] = useState(false);
+  const [restockAlert, setRestockAlert] = useState(null);
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [transferSuggestion, setTransferSuggestion] = useState(null);
+  const [transferSuggestions, setTransferSuggestions] = useState([]);
+  const [whatsappActivity, setWhatsappActivity] = useState([]);
+
   useEffect(() => {
     // Populate profile from backend user data first, then fallback to sessionStorage
     if (user?.businessData?.name) {
@@ -297,8 +360,10 @@ function DashboardContent() {
         location: user.businessData.location || defaultProfile.location,
         businessType: user.businessData.type || defaultProfile.businessType,
         features: { ...defaultProfile.features, ...(user.businessData.features || {}) },
+        distributorName: user.businessData.distributorName || "",
+        distributorPhone: user.businessData.distributorPhone || "",
       });
-      if (user.uploads?.length > 0) {
+      if (user.uploads?.length > 0 || user.sheetSources?.length > 0) {
         setHasData(true);
       }
     } else {
@@ -326,6 +391,75 @@ function DashboardContent() {
     } catch {}
   }, [user]);
 
+  // ── Fetch REAL dashboard data ─────────────────────────────────────────────
+  const fetchDashboardData = useCallback(async (showLoading = false) => {
+    if (showLoading) setDataLoading(true);
+    try {
+      const [summaryRes, alertsRes, recsRes] = await Promise.all([
+        getInventorySummary().catch(() => null),
+        getAlerts({ limit: 10 }).catch(() => null),
+        getRecommendations({ limit: 10 }).catch(() => null),
+      ]);
+
+      if (summaryRes?.success && summaryRes.summary?.totalItems > 0) {
+        setSummary(summaryRes.summary);
+        setHasData(true);
+        if (summaryRes.summary.lastSynced) {
+          setLastSynced(new Date(summaryRes.summary.lastSynced));
+        }
+      }
+
+      if (alertsRes?.success && alertsRes.alerts?.length > 0) {
+        setRealAlerts(alertsRes.alerts);
+      }
+
+      if (recsRes?.success && recsRes.recommendations?.length > 0) {
+        setRealRecommendations(recsRes.recommendations);
+      }
+
+      // Fetch transfer suggestions and WhatsApp activity
+      const [transferRes, notifsRes] = await Promise.all([
+        getTransferSuggestions().catch(() => null),
+        getNotifications({ limit: 30 }).catch(() => null),
+      ]);
+
+      if (transferRes?.success) {
+        setTransferSuggestions(transferRes.suggestions || []);
+      }
+
+      if (notifsRes?.success) {
+        const waMessages = (notifsRes.notifications || []).filter(
+          (n) => n.channels?.includes("whatsapp") || n.whatsappStatus === "sent" || n.whatsappStatus === "failed"
+        );
+        setWhatsappActivity(waMessages);
+      }
+    } catch (err) {
+      console.warn("[Dashboard] Failed to fetch real data:", err.message);
+    } finally {
+      setDataLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDashboardData(true);
+    // Auto-refresh every 60 seconds
+    const interval = setInterval(() => fetchDashboardData(false), 60_000);
+    return () => clearInterval(interval);
+  }, [fetchDashboardData]);
+
+  // ── Manual refresh ────────────────────────────────────────────────────────
+  const handleManualRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await syncAllSheets();
+      await fetchDashboardData(false);
+    } catch (err) {
+      console.warn("[Dashboard] Manual refresh failed:", err.message);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   // ── Fetch Predictive Intelligence ─────────────────────────────────────────
   const fetchPredictions = async (loc) => {
     setPredictionLoading(true);
@@ -348,55 +482,105 @@ function DashboardContent() {
     }
   }, [hasData, profile.location]);
 
-  // Derive alerts / recommendations from prediction or fallback
-  const liveAlerts = prediction?.alerts?.map((a, i) => ({
-    id: a.id || `pa_${i}`,
-    title: a.title,
-    detail: a.detail,
-    severity: a.severity,
-  })) || demoAlerts;
+  // ── Derive display data (real → fallback) ─────────────────────────────────
+  const liveAlerts = realAlerts
+    ? realAlerts.map((a, i) => ({
+        id: a._id || `a_${i}`,
+        title: a.message || a.productName,
+        detail: `${a.productName} — ${a.branch || "Main"}${a.quantityAtAlert != null ? ` (${a.quantityAtAlert} units)` : ""}`,
+        severity: a.severity,
+        productName: a.productName,
+        productId: a.productId,
+        branch: a.branch,
+        quantityAtAlert: a.quantityAtAlert,
+        minStockLevel: a.minStockLevel,
+      }))
+    : prediction?.alerts?.map((a, i) => ({
+        id: a.id || `pa_${i}`,
+        title: a.title,
+        detail: a.detail,
+        severity: a.severity,
+      })) || demoAlerts;
 
-  const liveRecommendations = prediction?.recommendations?.map((r, i) => ({
-    id: r.id || `pr_${i}`,
-    title: r.title,
-    detail: r.detail,
-    impact: r.impact || "Medium",
-  })) || demoRecommendations;
+  const liveRecommendations = realRecommendations
+    ? realRecommendations.map((r, i) => ({
+        id: r._id || `r_${i}`,
+        title: `${r.productName}: ${r.suggestion}`,
+        detail: r.reasoning || r.suggestion,
+        impact: r.priority === "urgent" ? "Critical" : r.priority === "high" ? "High" : "Medium",
+      }))
+    : prediction?.recommendations?.map((r, i) => ({
+        id: r.id || `pr_${i}`,
+        title: r.title,
+        detail: r.detail,
+        impact: r.impact || "Medium",
+      })) || demoRecommendations;
 
   const liveDemandInsights = prediction?.demandInsights || [];
 
+  // ── Restock & Transfer handlers ──────────────────────────────────────────
+  const handleAutoRestock = (alertItem) => {
+    setRestockAlert(alertItem);
+    setRestockModalOpen(true);
+  };
+
+  const handleInitiateTransfer = (suggestion) => {
+    setTransferSuggestion(suggestion);
+    setTransferModalOpen(true);
+  };
+
+  const handleProfileSaved = (newBizData) => {
+    setProfile((prev) => ({
+      ...prev,
+      businessName: newBizData.name || prev.businessName,
+      location: newBizData.location || prev.location,
+      businessType: newBizData.type || prev.businessType,
+      distributorName: newBizData.distributorName || "",
+      distributorPhone: newBizData.distributorPhone || "",
+    }));
+    refreshUser?.();
+  };
+
   const topInsight = prediction?.summary
     ? `${prediction.signals?.weather?.condition === "heatwave" ? "Heatwave" : prediction.signals?.weather?.condition || "Weather"} detected (${prediction.signals?.weather?.temperature || "--"}°C) — ${prediction.summary.totalAlerts} alerts, ${prediction.summary.totalRecommendations} recommendations generated.`
-    : "Wedding season detected in your region — sweets & dry fruits demand trending +28%. Consider stocking up.";
+    : summary
+    ? `${summary.totalItems} products tracked across ${Object.keys(summary.branches || {}).length} branches. ${summary.openAlerts || 0} active alerts.`
+    : "Connect a Google Sheet to see real-time AI insights for your business.";
+
+  // ── Charts (from real data if available) ──────────────────────────────────
+  const chartCategoryData = summary?.categories
+    ? Object.entries(summary.categories).map(([name, value]) => ({ name, value }))
+    : staticCategoryBreakdown;
+
+  const chartBranchData = summary?.branches
+    ? Object.entries(summary.branches).map(([branch, stats]) => ({
+        branch,
+        units: stats.units || 0,
+        risk: stats.risk || 0,
+        healthy: stats.healthy || 0,
+      }))
+    : staticStockByBranch;
 
   const charts = useMemo(
     () => (
       <div className="grid gap-6 lg:grid-cols-2">
         <ChartCard
-          title="Sales trend"
-          description="Last 6 months (demo)"
-          type="line"
-          data={salesTrend}
+          title="Stock by branch"
+          description={summary ? "Live data" : "Units on hand (demo)"}
+          type="bar"
+          data={chartBranchData}
         />
         <ChartCard
-          title="Stock by branch"
-          description="Units on hand (with risk)"
-          type="bar"
-          data={stockByBranch}
+          title="Category mix"
+          description={summary ? "Live data" : "Share of assortment (demo)"}
+          type="pie"
+          data={chartCategoryData}
+          dataKey="value"
+          xKey="name"
         />
-        <div className="lg:col-span-2">
-          <ChartCard
-            title="Category mix"
-            description="Share of assortment"
-            type="pie"
-            data={categoryBreakdown}
-            dataKey="value"
-            xKey="name"
-          />
-        </div>
       </div>
     ),
-    []
+    [chartBranchData, chartCategoryData, summary]
   );
 
   return (
@@ -416,6 +600,7 @@ function DashboardContent() {
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
+            <NotificationPanel />
             <Link href="/manage-data">
               <Button
                 type="button"
@@ -474,19 +659,39 @@ function DashboardContent() {
               </div>
             </div>
 
-            {/* AI Status Indicator */}
+            {/* AI Status + Last Synced + Refresh */}
             {hasData && (
-              <div className="flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-50 to-teal-50 px-4 py-2 shadow-sm">
-                <span className="relative flex h-3 w-3">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
-                </span>
-                <span className="text-xs font-semibold text-emerald-700">
-                  AI analyzing
-                  <span className="dot-blink-1"> .</span>
-                  <span className="dot-blink-2">.</span>
-                  <span className="dot-blink-3">.</span>
-                </span>
+              <div className="flex items-center gap-3">
+                {lastSynced && (
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold text-muted-foreground">Last synced</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {lastSynced.toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })}
+                    </p>
+                  </div>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full text-xs bg-white/70 hover:bg-white"
+                  onClick={handleManualRefresh}
+                  disabled={refreshing}
+                >
+                  <RefreshCw className={`mr-1 size-3 ${refreshing ? "animate-spin" : ""}`} />
+                  {refreshing ? "Syncing..." : "Refresh"}
+                </Button>
+                <div className="flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-50 to-teal-50 px-4 py-2 shadow-sm">
+                  <span className="relative flex h-3 w-3">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
+                  </span>
+                  <span className="text-xs font-semibold text-emerald-700">
+                    {summary ? "Live" : "AI analyzing"}
+                    <span className="dot-blink-1"> .</span>
+                    <span className="dot-blink-2">.</span>
+                    <span className="dot-blink-3">.</span>
+                  </span>
+                </div>
               </div>
             )}
           </motion.div>
@@ -543,21 +748,93 @@ function DashboardContent() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1, duration: 0.4 }}
               >
-                <StockHealthPanel />
+                <StockHealthPanel data={summary} />
               </motion.div>
 
-              {/* ─── ALERTS + RECOMMENDATIONS (Live from Predictive Engine) ─── */}
+              {/* ─── ALERTS + RECOMMENDATIONS (Real data first, then prediction, then demo) ─── */}
               <motion.div
                 className="grid gap-6 lg:grid-cols-2"
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.15, duration: 0.4 }}
               >
-                <AlertCard title="Predictive Alerts" items={liveAlerts} />
-                <RecommendationCard title="AI Recommendations" items={liveRecommendations} />
+                <AlertCard title="Active Alerts" items={liveAlerts} onAutoRestock={handleAutoRestock} />
+                <RecommendationCard
+                  title="AI Recommendations"
+                  items={liveRecommendations}
+                  transferSuggestions={transferSuggestions}
+                  onInitiateTransfer={handleInitiateTransfer}
+                />
               </motion.div>
 
-              {/* ─── AI Insight Banner (Live) ─── */}
+              {/* ─── INTERNAL TRANSFER SUGGESTIONS (prominent) ─── */}
+              {transferSuggestions.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.18, duration: 0.4 }}
+                >
+                  <Card className="overflow-hidden rounded-2xl border-blue-200/60 shadow-lg ring-1 ring-blue-100/50 bg-gradient-to-br from-blue-50/90 via-indigo-50/50 to-sky-50/40">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md">
+                            <ArrowRightLeft className="size-5" strokeWidth={1.75} />
+                          </span>
+                          <div>
+                            <CardTitle className="text-lg font-bold text-blue-950">
+                              Internal Transfer Suggestions
+                            </CardTitle>
+                            <p className="text-xs font-medium text-blue-600/60">AI-detected branch imbalances — save costs by redistributing</p>
+                          </div>
+                        </div>
+                        <span className="rounded-full bg-blue-100 px-2.5 py-1 text-[10px] font-bold text-blue-700">
+                          {transferSuggestions.length} suggestion{transferSuggestions.length > 1 ? "s" : ""}
+                        </span>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {transferSuggestions.map((s) => (
+                        <div
+                          key={s.id}
+                          className="group/item flex items-center gap-3 rounded-xl border border-blue-200/40 bg-white/70 px-4 py-3 shadow-sm backdrop-blur-sm transition-all duration-200 hover:bg-white hover:shadow-md"
+                        >
+                          <div className="w-1 shrink-0 self-stretch rounded-full bg-gradient-to-b from-blue-500 to-indigo-400" />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={cn(
+                                "rounded-full px-1.5 py-0.5 text-[9px] font-bold",
+                                s.priority === "urgent" ? "bg-red-100 text-red-700" :
+                                s.priority === "high" ? "bg-amber-100 text-amber-700" :
+                                "bg-blue-100 text-blue-700"
+                              )}>
+                                {s.priority?.toUpperCase()}
+                              </span>
+                              <p className="text-sm font-bold text-blue-950">
+                                Move {s.quantity}x {s.productName}
+                              </p>
+                            </div>
+                            <p className="mt-1 text-xs text-blue-800/60">
+                              {s.fromBranch} ({s.fromStock} units) → {s.toBranch} ({s.toStock} units)
+                            </p>
+                            <p className="mt-0.5 text-[10px] text-muted-foreground">{s.reason}</p>
+                          </div>
+                          <Button
+                            size="sm"
+                            className="shrink-0 h-8 rounded-full text-[10px] font-bold bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white"
+                            onClick={() => handleInitiateTransfer(s)}
+                          >
+                            <ArrowRightLeft className="mr-1 size-3" />
+                            Transfer
+                          </Button>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+
+              {/* ─── AI Insight Banner ─── */}
               <motion.div
                 className="flex items-center gap-3 rounded-2xl bg-gradient-to-r from-indigo-50 via-violet-50 to-purple-50 border border-primary/10 px-5 py-4 shadow-sm"
                 initial={{ opacity: 0, y: 12 }}
@@ -598,8 +875,19 @@ function DashboardContent() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.28, duration: 0.4 }}
               >
-                <BranchComparisonPanel />
+                <BranchComparisonPanel data={summary?.branches} />
               </motion.div>
+
+              {/* ─── WHATSAPP ACTIVITY ─── */}
+              {whatsappActivity.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3, duration: 0.4 }}
+                >
+                  <WhatsAppActivityPanel messages={whatsappActivity} />
+                </motion.div>
+              )}
 
               {/* ─── Charts ─── */}
               <motion.div
@@ -618,6 +906,8 @@ function DashboardContent() {
           location={profile.location}
           businessType={profile.businessType}
           features={profile.features}
+          distributorName={profile.distributorName}
+          onEditProfile={() => setEditProfileOpen(true)}
           className="hidden lg:block"
         />
       </div>
@@ -628,6 +918,8 @@ function DashboardContent() {
           location={profile.location}
           businessType={profile.businessType}
           features={profile.features}
+          distributorName={profile.distributorName}
+          onEditProfile={() => setEditProfileOpen(true)}
         />
       </div>
 
@@ -637,15 +929,35 @@ function DashboardContent() {
         onComplete={async (uploadData) => {
           setHasData(true);
           setModalOpen(false);
-          // Save upload to backend
-          if (uploadData) {
-            try {
-              await addUpload(uploadData);
-              await refreshUser();
-            } catch (err) {
-              console.warn("[Dashboard] Backend upload save failed:", err.message);
-            }
-          }
+          await fetchDashboardData(true);
+          await refreshUser();
+        }}
+      />
+
+      <EditProfileModal
+        open={editProfileOpen}
+        onOpenChange={setEditProfileOpen}
+        user={user}
+        onSaved={handleProfileSaved}
+      />
+
+      <AutoRestockModal
+        open={restockModalOpen}
+        onOpenChange={setRestockModalOpen}
+        alert={restockAlert}
+        distributorName={profile.distributorName}
+        distributorPhone={profile.distributorPhone}
+        onSent={() => {
+          fetchDashboardData(false);
+        }}
+      />
+
+      <BranchSwapModal
+        open={transferModalOpen}
+        onOpenChange={setTransferModalOpen}
+        suggestion={transferSuggestion}
+        onComplete={() => {
+          fetchDashboardData(false);
         }}
       />
     </div>

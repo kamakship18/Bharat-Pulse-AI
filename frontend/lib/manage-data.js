@@ -1,4 +1,42 @@
-/** Static mock data for Manage Data page */
+/** Manage Data — static fallback data + helper utilities */
+
+// ── Status computation from real inventory data ──────────────────────────────
+
+const EXPIRY_THRESHOLD_DAYS = 5;
+
+export function computeStatus(item) {
+  if (item.expiryDate) {
+    const now = new Date();
+    const expiry = new Date(item.expiryDate);
+    const diffDays = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
+    if (diffDays <= EXPIRY_THRESHOLD_DAYS) return "expiring";
+  }
+  const qty = Number(item.quantity ?? 0);
+  const min = Number(item.minStockLevel ?? 10);
+  if (qty <= 0) return "low-stock";
+  if (qty <= min) return "low-stock";
+  return "healthy";
+}
+
+export function mapInventoryItem(item) {
+  return {
+    id: item._id || item.productId || `item_${Math.random().toString(36).slice(2)}`,
+    name: item.name || item.productId || "Unknown",
+    category: item.category || "Uncategorized",
+    quantity: item.quantity ?? 0,
+    branch: item.branch || "Main",
+    expiryDate: item.expiryDate || null,
+    status: computeStatus(item),
+    price: item.price ?? 0,
+    costPrice: item.costPrice ?? null,
+    minStockLevel: item.minStockLevel ?? 10,
+    maxStockLevel: item.maxStockLevel ?? 500,
+    lastRestocked: item.lastRestocked || null,
+    lastSyncedAt: item.lastSyncedAt || null,
+  };
+}
+
+// ── Static fallback data ─────────────────────────────────────────────────────
 
 export const productInventory = [
   {

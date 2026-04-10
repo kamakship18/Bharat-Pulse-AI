@@ -469,10 +469,18 @@ function analyzeContext({ weather, events, inventory }) {
   uniqueRecs.sort((a, b) => (priorityOrder[a.priority] || 3) - (priorityOrder[b.priority] || 3));
   demandInsights.sort((a, b) => b.demandMultiplier - a.demandMultiplier);
 
+  // Deduplicate demand insights — keep highest multiplier per product
+  const seenProducts = new Set();
+  const uniqueDemand = demandInsights.filter((d) => {
+    if (seenProducts.has(d.product)) return false;
+    seenProducts.add(d.product);
+    return true;
+  });
+
   return {
     alerts,
     recommendations: uniqueRecs,
-    demandInsights,
+    demandInsights: uniqueDemand,
     summary: {
       totalAlerts: alerts.length,
       criticalAlerts: alerts.filter((a) => a.severity === "critical").length,

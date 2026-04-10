@@ -131,6 +131,145 @@ export async function getUploads() {
   return apiFetch("/user/uploads");
 }
 
+// ── Sheet Management APIs ─────────────────────────────────────────────────────
+
+export async function linkSheet(sheetUrl, branch) {
+  return apiFetch("/user/link-sheet", {
+    method: "POST",
+    body: JSON.stringify({ sheetUrl, branch }),
+  });
+}
+
+export async function getSheetSources() {
+  return apiFetch("/user/sheet-sources");
+}
+
+export async function unlinkSheet(index) {
+  return apiFetch(`/user/sheet-sources/${index}`, {
+    method: "DELETE",
+  });
+}
+
+export async function syncAllSheets() {
+  return apiFetch("/user/sync-all", {
+    method: "POST",
+  });
+}
+
+// ── Inventory APIs (Real Data) ────────────────────────────────────────────────
+
+export async function getInventory(params = {}) {
+  const q = new URLSearchParams();
+  if (params.branch) q.set("branch", params.branch);
+  if (params.category) q.set("category", params.category);
+  if (params.search) q.set("search", params.search);
+  if (params.page) q.set("page", params.page);
+  if (params.limit) q.set("limit", params.limit);
+  if (params.sortBy) q.set("sortBy", params.sortBy);
+  if (params.order) q.set("order", params.order);
+  const qs = q.toString();
+  return apiFetch(`/inventory${qs ? "?" + qs : ""}`);
+}
+
+export async function getInventoryByBranch() {
+  return apiFetch("/inventory/by-branch");
+}
+
+export async function getInventorySummary() {
+  return apiFetch("/inventory/summary");
+}
+
+export async function getAlerts(params = {}) {
+  const q = new URLSearchParams();
+  if (params.type) q.set("type", params.type);
+  if (params.resolved) q.set("resolved", params.resolved);
+  if (params.page) q.set("page", params.page);
+  if (params.limit) q.set("limit", params.limit);
+  const qs = q.toString();
+  return apiFetch(`/alerts${qs ? "?" + qs : ""}`);
+}
+
+export async function resolveAlert(alertId) {
+  return apiFetch(`/alerts/${alertId}/resolve`, {
+    method: "PATCH",
+  });
+}
+
+export async function getRecommendations(params = {}) {
+  const q = new URLSearchParams();
+  if (params.type) q.set("type", params.type);
+  if (params.priority) q.set("priority", params.priority);
+  if (params.page) q.set("page", params.page);
+  if (params.limit) q.set("limit", params.limit);
+  const qs = q.toString();
+  return apiFetch(`/recommendations${qs ? "?" + qs : ""}`);
+}
+
+// ── Notification APIs ─────────────────────────────────────────────────────────
+
+export async function getNotifications(params = {}) {
+  const q = new URLSearchParams();
+  if (params.unreadOnly) q.set("unreadOnly", params.unreadOnly);
+  if (params.page) q.set("page", params.page);
+  if (params.limit) q.set("limit", params.limit);
+  const qs = q.toString();
+  return apiFetch(`/notifications${qs ? "?" + qs : ""}`);
+}
+
+export async function markNotificationsRead(ids) {
+  return apiFetch("/notifications/mark-read", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+}
+
+// ── Profile APIs ──────────────────────────────────────────────────────────────
+
+export async function updateProfile(data) {
+  return apiFetch("/user/update-profile", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+// ── Restock & Transfer APIs ───────────────────────────────────────────────────
+
+export async function sendRestockOrder(data) {
+  return apiFetch("/inventory/restock-order", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getTransferSuggestions() {
+  return apiFetch("/inventory/transfer-suggestions");
+}
+
+export async function initiateTransfer(data) {
+  return apiFetch("/inventory/initiate-transfer", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// ── Excel Upload API ─────────────────────────────────────────────────────
+
+export async function uploadExcel(file) {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_BASE}/upload-excel`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
+  return data;
+}
+
 // ── Predictive Intelligence APIs ─────────────────────────────────────────────
 
 export async function runPrediction(location, lookaheadDays = 14) {
