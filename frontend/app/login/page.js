@@ -41,7 +41,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (authLoading) return;
     if (isAuthenticated && user) {
-      if (user.onboardingCompleted) {
+      if (user.onboardingCompleted === true) {
         router.replace("/dashboard");
       } else {
         router.replace("/onboarding");

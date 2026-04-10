@@ -65,7 +65,7 @@ const initialFeatures = () =>
 
 export function StepForm() {
   const router = useRouter();
-  const { refreshUser } = useAuth();
+  const { refreshUser, patchUser } = useAuth();
   const [step, setStep] = useState(1);
   const [businessName, setBusinessName] = useState("");
   const [location, setLocation] = useState("");
@@ -150,6 +150,20 @@ export function StepForm() {
       try {
         await saveOnboarding(payload);
         await refreshUser();
+        // refreshUser() can fail silently or return stale flags; after a successful
+        // save the DB is updated — force session state so ProtectedRoute doesn't
+        // send users through onboarding twice.
+        patchUser({
+          onboardingCompleted: true,
+          businessData: {
+            name: businessName,
+            location: location,
+            type: businessType,
+            branches,
+            features,
+            uploadPreference: uploadPref,
+          },
+        });
       } catch (err) {
         console.warn("[Onboarding] Backend save failed:", err.message);
         setSaveError("Could not save to server. Please try again.");
@@ -160,7 +174,7 @@ export function StepForm() {
       }
     }
 
-    router.push("/dashboard");
+    router.replace("/dashboard");
   };
 
   const stepLabels = ["Business", "Branches", "Features", "Data", "Review"];

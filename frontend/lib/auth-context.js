@@ -5,6 +5,15 @@ import { getUserData, getToken, clearAuth as clearAuthStorage } from "@/lib/api"
 
 const AuthContext = createContext(null);
 
+/** API may omit or stringify flags — only explicit true counts as done. */
+function normalizeUser(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  return {
+    ...raw,
+    onboardingCompleted: raw.onboardingCompleted === true,
+  };
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -26,7 +35,7 @@ export function AuthProvider({ children }) {
     try {
       const data = await getUserData();
       if (data.success && data.user) {
-        setUser(data.user);
+        setUser(normalizeUser(data.user));
         setIsAuthenticated(true);
       } else {
         clearAuthStorage();
@@ -48,8 +57,13 @@ export function AuthProvider({ children }) {
   }
 
   const login = useCallback((userData) => {
-    setUser(userData);
+    setUser(normalizeUser(userData));
     setIsAuthenticated(true);
+  }, []);
+
+  /** Merge fields into session user (e.g. after onboarding save when refresh lags). */
+  const patchUser = useCallback((partial) => {
+    setUser((prev) => normalizeUser({ ...(prev || {}), ...partial }));
   }, []);
 
   const logout = useCallback(() => {
@@ -62,15 +76,18 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  /** Returns true if /me returned a user payload. */
   const refreshUser = useCallback(async () => {
     try {
       const data = await getUserData();
       if (data.success && data.user) {
-        setUser(data.user);
+        setUser(normalizeUser(data.user));
+        return true;
       }
     } catch (err) {
       console.warn("[Auth] Refresh failed:", err.message);
     }
+    return false;
   }, []);
 
   return (
@@ -82,6 +99,7 @@ export function AuthProvider({ children }) {
         login,
         logout,
         refreshUser,
+        patchUser,
       }}
     >
       {children}

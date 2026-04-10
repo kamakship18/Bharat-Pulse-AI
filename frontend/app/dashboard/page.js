@@ -62,7 +62,6 @@ import {
   Calendar,
   Zap,
   RefreshCw,
-  ArrowRightLeft,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 
@@ -766,73 +765,6 @@ function DashboardContent() {
                   onInitiateTransfer={handleInitiateTransfer}
                 />
               </motion.div>
-
-              {/* ─── INTERNAL TRANSFER SUGGESTIONS (prominent) ─── */}
-              {transferSuggestions.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.18, duration: 0.4 }}
-                >
-                  <Card className="overflow-hidden rounded-2xl border-blue-200/60 shadow-lg ring-1 ring-blue-100/50 bg-gradient-to-br from-blue-50/90 via-indigo-50/50 to-sky-50/40">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md">
-                            <ArrowRightLeft className="size-5" strokeWidth={1.75} />
-                          </span>
-                          <div>
-                            <CardTitle className="text-lg font-bold text-blue-950">
-                              Internal Transfer Suggestions
-                            </CardTitle>
-                            <p className="text-xs font-medium text-blue-600/60">AI-detected branch imbalances — save costs by redistributing</p>
-                          </div>
-                        </div>
-                        <span className="rounded-full bg-blue-100 px-2.5 py-1 text-[10px] font-bold text-blue-700">
-                          {transferSuggestions.length} suggestion{transferSuggestions.length > 1 ? "s" : ""}
-                        </span>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {transferSuggestions.map((s) => (
-                        <div
-                          key={s.id}
-                          className="group/item flex items-center gap-3 rounded-xl border border-blue-200/40 bg-white/70 px-4 py-3 shadow-sm backdrop-blur-sm transition-all duration-200 hover:bg-white hover:shadow-md"
-                        >
-                          <div className="w-1 shrink-0 self-stretch rounded-full bg-gradient-to-b from-blue-500 to-indigo-400" />
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className={cn(
-                                "rounded-full px-1.5 py-0.5 text-[9px] font-bold",
-                                s.priority === "urgent" ? "bg-red-100 text-red-700" :
-                                s.priority === "high" ? "bg-amber-100 text-amber-700" :
-                                "bg-blue-100 text-blue-700"
-                              )}>
-                                {s.priority?.toUpperCase()}
-                              </span>
-                              <p className="text-sm font-bold text-blue-950">
-                                Move {s.quantity}x {s.productName}
-                              </p>
-                            </div>
-                            <p className="mt-1 text-xs text-blue-800/60">
-                              {s.fromBranch} ({s.fromStock} units) → {s.toBranch} ({s.toStock} units)
-                            </p>
-                            <p className="mt-0.5 text-[10px] text-muted-foreground">{s.reason}</p>
-                          </div>
-                          <Button
-                            size="sm"
-                            className="shrink-0 h-8 rounded-full text-[10px] font-bold bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white"
-                            onClick={() => handleInitiateTransfer(s)}
-                          >
-                            <ArrowRightLeft className="mr-1 size-3" />
-                            Transfer
-                          </Button>
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              )}
 
               {/* ─── AI Insight Banner ─── */}
               <motion.div

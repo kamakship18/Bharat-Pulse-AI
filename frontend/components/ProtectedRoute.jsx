@@ -28,7 +28,7 @@ export function ProtectedRoute({ children, requireOnboarding = true }) {
       return;
     }
 
-    if (requireOnboarding && user && !user.onboardingCompleted) {
+    if (requireOnboarding && user && user.onboardingCompleted !== true) {
       router.replace("/onboarding");
     }
   }, [loading, isAuthenticated, user, requireOnboarding, router]);
@@ -54,7 +54,7 @@ export function ProtectedRoute({ children, requireOnboarding = true }) {
     return null; // Will redirect
   }
 
-  if (requireOnboarding && user && !user.onboardingCompleted) {
+  if (requireOnboarding && user && user.onboardingCompleted !== true) {
     return null; // Will redirect
   }
 
