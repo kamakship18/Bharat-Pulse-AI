@@ -95,6 +95,7 @@ async function sendAndLog({ userId, to, message, title, type = "system", severit
   const channels = ["inapp"];
   let whatsappStatus = "skipped";
   let whatsappSid = null;
+  let whatsappError = null;
 
   if (to) {
     const result = await sendWhatsApp(to, message);
@@ -102,12 +103,13 @@ async function sendAndLog({ userId, to, message, title, type = "system", severit
       channels.push("whatsapp");
       whatsappStatus = "sent";
       whatsappSid = result.sid;
-    } else if (!result.mock) {
-      whatsappStatus = "failed";
-    } else {
+    } else if (result.mock) {
       channels.push("whatsapp");
       whatsappStatus = "sent";
       whatsappSid = result.sid;
+    } else {
+      whatsappStatus = "failed";
+      whatsappError = result.error || "Unknown Twilio error";
     }
   }
 
@@ -125,7 +127,7 @@ async function sendAndLog({ userId, to, message, title, type = "system", severit
         whatsappStatus,
         whatsappSid,
       });
-      return { success: true, notification, whatsappStatus, whatsappSid };
+      return { success: true, notification, whatsappStatus, whatsappSid, whatsappError };
     } catch (err) {
       if (err.code !== 11000) {
         console.error("[WhatsApp] Failed to save notification:", err.message);
@@ -133,7 +135,7 @@ async function sendAndLog({ userId, to, message, title, type = "system", severit
     }
   }
 
-  return { success: true, whatsappStatus, whatsappSid, mock: !twilioClient };
+  return { success: true, whatsappStatus, whatsappSid, whatsappError, mock: !twilioClient };
 }
 
 // ── Notify user about an alert ───────────────────────────────────────────────

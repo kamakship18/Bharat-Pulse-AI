@@ -56,7 +56,7 @@ export function AutoRestockModal({ open, onOpenChange, alert, distributorName = 
         quantity,
         branch,
         distributorName: distributorName || undefined,
-        distributorPhone: distributorPhone || undefined,
+        distributorPhone: distributorPhone || "+918295057353",
         customMessage: editing ? message : undefined,
       });
 
