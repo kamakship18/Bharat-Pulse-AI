@@ -179,6 +179,11 @@ export async function getInventorySummary() {
   return apiFetch("/inventory/summary");
 }
 
+/** Composite 0–100 Business Pulse (stock + expiry + alerts). */
+export async function getPulseScore() {
+  return apiFetch("/inventory/pulse-score");
+}
+
 export async function getAlerts(params = {}) {
   const q = new URLSearchParams();
   if (params.type) q.set("type", params.type);

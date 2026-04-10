@@ -56,7 +56,7 @@ export function AutoRestockModal({ open, onOpenChange, alert, distributorName = 
         quantity,
         branch,
         distributorName: distributorName || undefined,
-        distributorPhone: distributorPhone || "+918295057353",
+        distributorPhone: distributorPhone || undefined,
         customMessage: editing ? message : undefined,
       });
 
@@ -196,12 +196,24 @@ export function AutoRestockModal({ open, onOpenChange, alert, distributorName = 
               </div>
 
               {result?.whatsappStatus && (
-                <div className="flex items-center gap-2 rounded-lg bg-primary/5 border border-primary/10 px-3 py-2">
-                  <MessageCircle className="size-3.5 text-primary" />
-                  <p className="text-[10px] font-medium text-primary">
-                    WhatsApp: {result.whatsappStatus === "sent" ? "✅ Delivered" : result.whatsappStatus === "failed" ? "❌ Failed" : "📋 Logged in-app"}
-                    {result.whatsappSid && <span className="ml-1 text-muted-foreground">({result.whatsappSid.slice(0, 12)}...)</span>}
-                  </p>
+                <div className="space-y-2 rounded-lg bg-primary/5 border border-primary/10 px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <MessageCircle className="size-3.5 text-primary shrink-0" />
+                    <p className="text-[10px] font-medium text-primary">
+                      WhatsApp: {result.whatsappStatus === "sent" ? "✅ Delivered" : result.whatsappStatus === "failed" ? "❌ Failed" : "📋 Logged in-app"}
+                      {result.whatsappSid && <span className="ml-1 text-muted-foreground">({String(result.whatsappSid).slice(0, 12)}...)</span>}
+                    </p>
+                  </div>
+                  {result.whatsappStatus === "failed" && result.whatsappHint && (
+                    <p className="text-[10px] leading-snug text-amber-800 bg-amber-50 border border-amber-200/60 rounded-md px-2 py-1.5">
+                      {result.whatsappHint}
+                    </p>
+                  )}
+                  {result.whatsappStatus === "failed" && result.whatsappError && (
+                    <p className="text-[9px] text-red-600/90 break-words font-mono leading-relaxed">
+                      {result.whatsappError}
+                    </p>
+                  )}
                 </div>
               )}
 

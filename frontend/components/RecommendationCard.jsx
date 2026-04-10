@@ -6,8 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export function RecommendationCard({ title, items, transferSuggestions = [], onInitiateTransfer }) {
-  const transferItems = transferSuggestions.map((s) => ({
-    id: `transfer-${s.id ?? s.productName}`,
+  const transferItems = transferSuggestions.map((s, i) => ({
+    id: s.id ? `transfer-${s.id}` : `transfer-${i}-${s.productId ?? "sku"}-${s.fromBranch ?? ""}-${s.toBranch ?? ""}`,
     title: `Transfer ${s.quantity}x ${s.productName}`,
     detail: [
       `Move from ${s.fromBranch} (${s.fromStock} units) → ${s.toBranch} (${s.toStock} units)`,

@@ -108,7 +108,7 @@ export function WhatsAppActivityPanel({ alerts = [], recommendations = [], trans
       severity: null,
     })),
     ...topTransfers.map((t, i) => ({
-      id: `xfer_${t.productId || i}`,
+      id: t.id ? `xfer_${t.id}` : `xfer_${i}_${String(t.productId ?? "p")}_${t.fromBranch ?? ""}_${t.toBranch ?? ""}`,
       kind: "transfer",
       label: `Move ${t.quantity ?? "?"} × ${t.productName} — ${t.fromBranch} → ${t.toBranch}`,
       detail: t.reason || t.reasoning || null,

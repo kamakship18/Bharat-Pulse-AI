@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartCard } from "@/components/ChartCard";
 import { AlertCard } from "@/components/AlertCard";
 import { RecommendationCard } from "@/components/RecommendationCard";
+import { PulseScoreCard } from "@/components/PulseScoreCard";
 import { ProfilePanel } from "@/components/ProfilePanel";
 import { UploadModal } from "@/components/UploadModal";
 import { NotificationPanel } from "@/components/NotificationPanel";
@@ -18,6 +19,7 @@ import {
   addUpload,
   getPrediction,
   getInventorySummary,
+  getPulseScore,
   getAlerts,
   getRecommendations,
   getNotifications,
@@ -350,6 +352,7 @@ function DashboardContent() {
   const [transferSuggestion, setTransferSuggestion] = useState(null);
   const [transferSuggestions, setTransferSuggestions] = useState([]);
   const [whatsappActivity, setWhatsappActivity] = useState([]);
+  const [pulse, setPulse] = useState(null);
 
   useEffect(() => {
     // Populate profile from backend user data first, then fallback to sessionStorage
@@ -394,11 +397,18 @@ function DashboardContent() {
   const fetchDashboardData = useCallback(async (showLoading = false) => {
     if (showLoading) setDataLoading(true);
     try {
-      const [summaryRes, alertsRes, recsRes] = await Promise.all([
+      const [summaryRes, alertsRes, recsRes, pulseRes] = await Promise.all([
         getInventorySummary().catch(() => null),
         getAlerts({ limit: 10 }).catch(() => null),
         getRecommendations({ limit: 10 }).catch(() => null),
+        getPulseScore().catch(() => null),
       ]);
+
+      if (pulseRes?.success && pulseRes.pulse) {
+        setPulse(pulseRes.pulse);
+      } else {
+        setPulse(null);
+      }
 
       if (summaryRes?.success && summaryRes.summary?.totalItems > 0) {
         setSummary(summaryRes.summary);
@@ -749,6 +759,16 @@ function DashboardContent() {
               >
                 <StockHealthPanel data={summary} />
               </motion.div>
+
+              {pulse && (
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.12, duration: 0.4 }}
+                >
+                  <PulseScoreCard pulse={pulse} />
+                </motion.div>
+              )}
 
               {/* ─── ALERTS + RECOMMENDATIONS (Real data first, then prediction, then demo) ─── */}
               <motion.div
