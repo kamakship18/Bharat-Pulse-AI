@@ -39,12 +39,26 @@ connectDB()
   });
 
 // ── Middleware ────────────────────────────────────────────────────────────────
-app.use(cors());
+app.use(
+  cors(
+    process.env.CORS_ORIGIN
+      ? {
+          origin: process.env.CORS_ORIGIN.split(",").map((s) => s.trim()),
+          credentials: true,
+        }
+      : undefined
+  )
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Serve the static frontend
 app.use(express.static(path.join(__dirname, "public")));
+
+// ── Health check (used by Render & monitoring) ────────────────────────────────
+app.get("/api/health", (_req, res) =>
+  res.json({ status: "ok", uptime: process.uptime() })
+);
 
 // ── API Routes ────────────────────────────────────────────────────────────────
 
