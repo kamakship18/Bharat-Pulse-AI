@@ -28,6 +28,32 @@ function isAvailable() {
   return !!twilioClient;
 }
 
+/**
+ * Twilio expects whatsapp:+E164. Accepts 10-digit Indian numbers, +91…, spaces, etc.
+ */
+function normalizeWhatsAppTo(to) {
+  if (to == null || to === "") return null;
+  let s = String(to).trim();
+  s = s.replace(/^whatsapp:/i, "");
+  const digits = s.replace(/\D/g, "");
+  if (digits.length === 10) {
+    return `+91${digits}`;
+  }
+  if (digits.length === 12 && digits.startsWith("91")) {
+    return `+${digits}`;
+  }
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+${digits}`;
+  }
+  if (s.startsWith("+") && digits.length >= 10) {
+    return `+${digits}`;
+  }
+  if (digits.length >= 10) {
+    return `+${digits}`;
+  }
+  return null;
+}
+
 // ── Message formatting ───────────────────────────────────────────────────────
 
 function formatAlertMessage(alert, recommendation) {
@@ -71,16 +97,22 @@ async function sendWhatsApp(to, message) {
     return { success: true, mock: true, sid: `mock_${Date.now()}` };
   }
 
+  const normalized = normalizeWhatsAppTo(to);
+  if (!normalized) {
+    console.error(`[WhatsApp] Invalid destination: ${to}`);
+    return { success: false, mock: false, error: "Invalid phone number for WhatsApp." };
+  }
+
   try {
     const result = await twilioClient.messages.create({
       from: `whatsapp:${TWILIO_FROM}`,
-      to: `whatsapp:${to}`,
+      to: `whatsapp:${normalized}`,
       body: message,
     });
-    console.log(`[WhatsApp] ✅ Sent to ${to} — SID: ${result.sid}`);
+    console.log(`[WhatsApp] ✅ Sent to ${normalized} — SID: ${result.sid}`);
     return { success: true, mock: false, sid: result.sid };
   } catch (err) {
-    console.error(`[WhatsApp] ❌ Failed to send to ${to}: ${err.message}`);
+    console.error(`[WhatsApp] ❌ Failed to send to ${normalized}: ${err.message}`);
     return { success: false, mock: false, error: err.message };
   }
 }
@@ -239,6 +271,7 @@ async function notifyAlerts(alerts, recsMap = {}, userPhone = null) {
 module.exports = {
   initTwilio,
   isAvailable,
+  normalizeWhatsAppTo,
   sendWhatsApp,
   sendAndLog,
   notifyAlert,

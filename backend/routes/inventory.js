@@ -16,6 +16,7 @@ const alertEngine    = require("../utils/alertEngine");
 const aiEngine       = require("../utils/aiEngine");
 const whatsappEngine = require("../utils/whatsappEngine");
 const authMiddleware = require("../utils/authMiddleware");
+const { computePulseScore } = require("../utils/businessPulseScore");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -686,6 +687,58 @@ router.get("/inventory/summary", dbGuard, optionalAuth, async (req, res) => {
   }
 });
 
+// ── GET /api/inventory/pulse-score ───────────────────────────────────────────
+// Composite 0–100 "Business Pulse" for MSME dashboards (stock + expiry + alerts).
+//
+router.get("/inventory/pulse-score", dbGuard, optionalAuth, async (req, res) => {
+  try {
+    const filter = {};
+    if (req.userId) filter.userId = req.userId;
+    const alertFilter = {};
+    if (req.userId) alertFilter.userId = req.userId;
+
+    const items = await InventoryItem.find(filter).lean();
+    const now = new Date();
+    const expiryThreshold = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
+
+    const totalItems = items.length;
+    const outOfStock = items.filter((i) => i.quantity === 0).length;
+    const lowStock = items.filter((i) => i.quantity > 0 && i.quantity <= (i.minStockLevel || 10)).length;
+    const expiringSoon = items.filter(
+      (i) => i.expiryDate && new Date(i.expiryDate) <= expiryThreshold && new Date(i.expiryDate) >= now
+    ).length;
+    const expired = items.filter((i) => i.expiryDate && new Date(i.expiryDate) < now).length;
+    const healthy = totalItems - outOfStock - lowStock - expiringSoon - expired;
+
+    const branches = {};
+    for (const item of items) {
+      branches[item.branch || "Main"] = true;
+    }
+    const branchCount = Object.keys(branches).length;
+
+    const [openAlerts, totalRecs] = await Promise.all([
+      Alert.countDocuments({ ...alertFilter, resolved: false }),
+      Recommendation.countDocuments(alertFilter.userId ? { userId: alertFilter.userId } : {}),
+    ]);
+
+    const pulse = computePulseScore({
+      totalItems,
+      outOfStock,
+      lowStock,
+      expiringSoon,
+      expired,
+      healthy: Math.max(0, healthy),
+      openAlerts,
+      branchCount,
+      totalRecommendations: totalRecs,
+    });
+
+    return res.status(200).json({ success: true, pulse });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── GET /api/alerts ───────────────────────────────────────────────────────────
 // Query: ?type=low_stock&resolved=false&page=1&limit=50
 //
@@ -806,7 +859,10 @@ router.post("/inventory/restock-order", dbGuard, optionalAuth, async (req, res) 
     let userPhone = null;
     let userId = req.userId || null;
     let distName = distributorName || "Distributor";
-    let distPhone = distributorPhone || null;
+    let distPhone =
+      distributorPhone && String(distributorPhone).trim()
+        ? String(distributorPhone).trim()
+        : null;
 
     if (req.userId) {
       const user = await User.findById(req.userId).lean();
@@ -814,8 +870,8 @@ router.post("/inventory/restock-order", dbGuard, optionalAuth, async (req, res) 
       if (!distributorName && user?.businessData?.distributorName) {
         distName = user.businessData.distributorName;
       }
-      if (!distributorPhone && user?.businessData?.distributorPhone) {
-        distPhone = user.businessData.distributorPhone;
+      if (!distPhone && user?.businessData?.distributorPhone) {
+        distPhone = String(user.businessData.distributorPhone).trim() || null;
       }
     }
 
@@ -832,8 +888,12 @@ router.post("/inventory/restock-order", dbGuard, optionalAuth, async (req, res) 
       `🤖 _BharatPulse AI_ | ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`,
     ].join("\n");
 
-    const DEMO_PHONE = "+918295057353";
-    const sendTo = distPhone || userPhone || DEMO_PHONE;
+    // Optional: WHATSAPP_RESTOCK_TO forces *all* restock WhatsApps to this number (demo / ops).
+    // Otherwise: profile distributor → logged-in user phone → WHATSAPP_RESTOCK_FALLBACK (+917889500877).
+    const forced = (process.env.WHATSAPP_RESTOCK_TO || "").trim();
+    const fallback =
+      (process.env.WHATSAPP_RESTOCK_FALLBACK || "").trim() || "+917889500877";
+    const sendTo = forced || distPhone || userPhone || fallback;
     const result = await whatsappEngine.sendAndLog({
       userId,
       to: sendTo,
@@ -843,12 +903,28 @@ router.post("/inventory/restock-order", dbGuard, optionalAuth, async (req, res) 
       severity: "warning",
     });
 
+    const errMsg = result.whatsappError || "";
+    let whatsappHint = null;
+    if (result.whatsappStatus === "failed" && errMsg) {
+      if (/63016|63007|21610|not.*opted|sandbox|join/i.test(errMsg)) {
+        whatsappHint =
+          "Twilio WhatsApp Sandbox: the recipient must opt in first — from that number, send the join code to Twilio’s sandbox WhatsApp (see Twilio Console → Messaging → Try WhatsApp).";
+      } else if (/21211|invalid/i.test(errMsg)) {
+        whatsappHint = "Check phone format (use +91 and 10 digits for India).";
+      }
+    }
+
+    const sentToDisplay =
+      whatsappEngine.normalizeWhatsAppTo?.(sendTo) || sendTo;
+
     return res.json({
       success: true,
       message: `Restock order sent for ${productName}.`,
       whatsappStatus: result.whatsappStatus,
       whatsappSid: result.whatsappSid,
-      sentTo: sendTo || "in-app only",
+      whatsappError: result.whatsappError || null,
+      whatsappHint,
+      sentTo: sentToDisplay || sendTo || "in-app only",
       orderMessage: message,
     });
   } catch (err) {

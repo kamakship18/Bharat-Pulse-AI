@@ -117,6 +117,7 @@ const server = app.listen(PORT, () => {
   console.log(`   GET  /api/inventory                     → list inventory items`);
   console.log(`   GET  /api/inventory/by-branch           → items grouped by branch`);
   console.log(`   GET  /api/inventory/summary             → dashboard counts`);
+  console.log(`   GET  /api/inventory/pulse-score         → Business Pulse 0–100 score`);
   console.log(`   GET  /api/alerts                        → list alerts`);
   console.log(`   GET  /api/recommendations               → AI recommendations`);
   console.log(`   PATCH /api/alerts/:id/resolve           → resolve an alert`);
