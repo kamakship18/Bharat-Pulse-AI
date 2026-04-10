@@ -25,7 +25,7 @@ router.get("/me", authMiddleware, async (req, res) => {
       user: {
         id: user._id,
         phoneNumber: user.phoneNumber,
-        onboardingCompleted: user.onboardingCompleted,
+        onboardingCompleted: user.onboardingCompleted === true,
         businessData: user.businessData,
         uploads: user.uploads || [],
         sheetSources: user.sheetSources || [],

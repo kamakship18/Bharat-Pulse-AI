@@ -200,7 +200,9 @@ const activePollers = new Map();
 function startPoller(sheetUrl, branch, userId, intervalMs, userPhone) {
   const pollerKey = `${userId || "global"}_${sheetUrl}_${branch}`;
   if (activePollers.has(pollerKey)) {
-    activePollers.get(pollerKey).destroy();
+    const prev = activePollers.get(pollerKey);
+    // node-cron ScheduledTask uses .stop(), not .destroy()
+    if (prev && typeof prev.stop === "function") prev.stop();
   }
 
   // node-cron doesn't accept ms directly; convert to a safe minimum 1-minute cron
