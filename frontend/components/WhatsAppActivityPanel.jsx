@@ -16,21 +16,21 @@ import {
 } from "lucide-react";
 import { sendWhatsAppReport } from "@/lib/api";
 
-const TO_NUMBER = "+918295057353";
+const TO_NUMBER = "+Testing";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function severityDot(sev) {
   if (sev === "critical") return "bg-red-500";
-  if (sev === "warning")  return "bg-amber-400";
+  if (sev === "warning") return "bg-amber-400";
   return "bg-emerald-400";
 }
 
 function ActivityBadge({ status }) {
   const map = {
-    sent:    { icon: CheckCircle2, label: "Sent",    cls: "text-emerald-600 bg-emerald-50" },
-    failed:  { icon: XCircle,      label: "Failed",  cls: "text-red-600 bg-red-50" },
-    pending: { icon: Clock,        label: "Pending", cls: "text-amber-600 bg-amber-50" },
+    sent: { icon: CheckCircle2, label: "Sent", cls: "text-emerald-600 bg-emerald-50" },
+    failed: { icon: XCircle, label: "Failed", cls: "text-red-600 bg-red-50" },
+    pending: { icon: Clock, label: "Pending", cls: "text-amber-600 bg-amber-50" },
   };
   const cfg = map[status] || { icon: MessageCircle, label: "Logged", cls: "text-muted-foreground bg-muted/30" };
   const Icon = cfg.icon;
@@ -46,20 +46,19 @@ function ActivityBadge({ status }) {
 function SelectableItem({ item, checked, onToggle }) {
   const Icon = item.kind === "alert" ? AlertTriangle
     : item.kind === "recommendation" ? Lightbulb
-    : ArrowRightLeft;
+      : ArrowRightLeft;
   const iconColor = item.kind === "alert"
     ? (item.severity === "critical" ? "text-red-500" : "text-amber-500")
     : item.kind === "recommendation" ? "text-blue-500"
-    : "text-purple-500";
+      : "text-purple-500";
   const bg = item.kind === "alert"
     ? (item.severity === "critical" ? "bg-red-50" : "bg-amber-50")
     : item.kind === "recommendation" ? "bg-blue-50"
-    : "bg-purple-50";
+      : "bg-purple-50";
 
   return (
-    <label className={`flex cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2.5 transition-all ${
-      checked ? "border-emerald-300 bg-emerald-50/60" : "border-border/40 bg-white/60 hover:bg-white/90"
-    }`}>
+    <label className={`flex cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2.5 transition-all ${checked ? "border-emerald-300 bg-emerald-50/60" : "border-border/40 bg-white/60 hover:bg-white/90"
+      }`}>
       <input
         type="checkbox"
         checked={checked}
@@ -116,8 +115,8 @@ export function WhatsAppActivityPanel({ alerts = [], recommendations = [], trans
     })),
   ];
 
-  const [selected, setSelected]  = useState(() => new Set(allItems.map((i) => i.id)));
-  const [sending, setSending]    = useState(false);
+  const [selected, setSelected] = useState(() => new Set(allItems.map((i) => i.id)));
+  const [sending, setSending] = useState(false);
   const [statusMsg, setStatusMsg] = useState(null); // { ok, text }
 
   function toggleItem(id) {
@@ -171,12 +170,12 @@ export function WhatsAppActivityPanel({ alerts = [], recommendations = [], trans
   }
 
   const histDisplay = messages.slice(0, 2);
-  const sentCount   = messages.filter((m) => m.whatsappStatus === "sent").length;
+  const sentCount = messages.filter((m) => m.whatsappStatus === "sent").length;
   const failedCount = messages.filter((m) => m.whatsappStatus === "failed").length;
 
-  const alertItems  = allItems.filter((i) => i.kind === "alert");
-  const recItems    = allItems.filter((i) => i.kind === "recommendation");
-  const xferItems   = allItems.filter((i) => i.kind === "transfer");
+  const alertItems = allItems.filter((i) => i.kind === "alert");
+  const recItems = allItems.filter((i) => i.kind === "recommendation");
+  const xferItems = allItems.filter((i) => i.kind === "transfer");
 
   return (
     <Card className="overflow-hidden rounded-2xl border-white/50 bg-white/70 shadow-lg backdrop-blur-md">
@@ -266,9 +265,8 @@ export function WhatsAppActivityPanel({ alerts = [], recommendations = [], trans
                   initial={{ opacity: 0, y: -4 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
-                  className={`rounded-lg px-3 py-2 text-[11px] font-medium ${
-                    statusMsg.ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"
-                  }`}
+                  className={`rounded-lg px-3 py-2 text-[11px] font-medium ${statusMsg.ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"
+                    }`}
                 >
                   {statusMsg.ok ? "✅" : "❌"} {statusMsg.text}
                 </motion.p>
