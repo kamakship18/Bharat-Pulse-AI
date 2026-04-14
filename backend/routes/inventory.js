@@ -1,19 +1,19 @@
-const express    = require("express");
-const mongoose   = require("mongoose");
-const cron       = require("node-cron");
-const multer     = require("multer");
-const XLSX       = require("xlsx");
-const router     = express.Router();
+const express = require("express");
+const mongoose = require("mongoose");
+const cron = require("node-cron");
+const multer = require("multer");
+const XLSX = require("xlsx");
+const router = express.Router();
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const { extractSheetData, parseSheetUrl } = require("../utils/sheetExtractor");
-const InventoryItem  = require("../models/InventoryItem");
-const Alert          = require("../models/Alert");
+const InventoryItem = require("../models/InventoryItem");
+const Alert = require("../models/Alert");
 const Recommendation = require("../models/Recommendation");
-const User           = require("../models/User");
-const alertEngine    = require("../utils/alertEngine");
-const aiEngine       = require("../utils/aiEngine");
+const User = require("../models/User");
+const alertEngine = require("../utils/alertEngine");
+const aiEngine = require("../utils/aiEngine");
 const whatsappEngine = require("../utils/whatsappEngine");
 const authMiddleware = require("../utils/authMiddleware");
 const { computePulseScore } = require("../utils/businessPulseScore");
@@ -26,7 +26,7 @@ function dbGuard(req, res, next) {
   if (!isDbConnected()) {
     return res.status(503).json({
       success: false,
-      error:   "MongoDB is not connected. Check your MONGODB_URI in .env.",
+      error: "MongoDB is not connected. Check your MONGODB_URI in .env.",
     });
   }
   next();
@@ -59,18 +59,18 @@ function optionalAuth(req, res, next) {
  * Keys are inventory fields; values are arrays of accepted aliases (lower-case).
  */
 const COLUMN_MAP = {
-  productId:    ["id", "product_id", "productid", "sku", "item_id", "itemid", "item_id", "code", "item id"],
-  name:         ["name", "product", "product_name", "productname", "item", "item_name", "itemname", "title", "item name"],
-  category:     ["category", "type", "product_type", "department", "group"],
-  quantity:     ["quantity", "qty", "stock", "count", "units", "available", "on_hand", "stock_level", "stocklevel", "stock level"],
-  units:        ["unit", "uom", "unit_of_measure", "measurement"],
-  minStockLevel:["min_stock", "min_level", "reorder_point", "reorder", "minimum", "min_qty"],
-  maxStockLevel:["max_stock", "max_level", "maximum", "max_qty"],
-  costPrice:    ["cost_price", "costprice", "cost", "purchase_price", "buying_price"],
-  price:        ["price", "selling_price", "sellingprice", "unit_price", "rate", "mrp", "sp"],
-  expiryDate:   ["expiry", "expiry_date", "expirydate", "expiration", "expiration_date", "best_before", "use_by"],
-  lastRestocked:["last_restocked", "lastrestocked", "last_restock", "last_restock_date", "restock_date", "lastrestock"],
-  branch:       ["branch", "location", "outlet", "store", "outlet_location", "outlet location"],
+  productId: ["id", "product_id", "productid", "sku", "item_id", "itemid", "item_id", "code", "item id"],
+  name: ["name", "product", "product_name", "productname", "item", "item_name", "itemname", "title", "item name"],
+  category: ["category", "type", "product_type", "department", "group"],
+  quantity: ["quantity", "qty", "stock", "count", "units", "available", "on_hand", "stock_level", "stocklevel", "stock level"],
+  units: ["unit", "uom", "unit_of_measure", "measurement"],
+  minStockLevel: ["min_stock", "min_level", "reorder_point", "reorder", "minimum", "min_qty"],
+  maxStockLevel: ["max_stock", "max_level", "maximum", "max_qty"],
+  costPrice: ["cost_price", "costprice", "cost", "purchase_price", "buying_price"],
+  price: ["price", "selling_price", "sellingprice", "unit_price", "rate", "mrp", "sp"],
+  expiryDate: ["expiry", "expiry_date", "expirydate", "expiration", "expiration_date", "best_before", "use_by"],
+  lastRestocked: ["last_restocked", "lastrestocked", "last_restock", "last_restock_date", "restock_date", "lastrestock"],
+  branch: ["branch", "location", "outlet", "store", "outlet_location", "outlet location"],
   productionBatch: ["batch", "production_batch", "batch_id", "lot", "lot_number"],
 };
 
@@ -87,7 +87,7 @@ function mapRowToInventory(row, sheetUrl, overrideBranch, userId) {
     }
   }
 
-  const mapped     = {};
+  const mapped = {};
   const extraFields = {};
 
   for (const [rawKey, rawValue] of Object.entries(row)) {
@@ -95,7 +95,7 @@ function mapRowToInventory(row, sheetUrl, overrideBranch, userId) {
     if (rawKey.startsWith("__")) continue;
 
     const normKey = rawKey.toLowerCase().trim().replace(/\s+/g, "_");
-    const field   = headerToField[normKey];
+    const field = headerToField[normKey];
 
     if (field) {
       mapped[field] = rawValue;
@@ -105,11 +105,11 @@ function mapRowToInventory(row, sheetUrl, overrideBranch, userId) {
   }
 
   // ── Type coercion ──────────────────────────────────────────────────────────
-  if (mapped.quantity     !== undefined) mapped.quantity     = Number(mapped.quantity)     || 0;
+  if (mapped.quantity !== undefined) mapped.quantity = Number(mapped.quantity) || 0;
   if (mapped.minStockLevel !== undefined) mapped.minStockLevel = Number(mapped.minStockLevel) || 10;
   if (mapped.maxStockLevel !== undefined) mapped.maxStockLevel = Number(mapped.maxStockLevel) || 500;
-  if (mapped.costPrice    !== undefined) mapped.costPrice    = parseFloat(mapped.costPrice)  || null;
-  if (mapped.price        !== undefined) mapped.price        = parseFloat(mapped.price)    || null;
+  if (mapped.costPrice !== undefined) mapped.costPrice = parseFloat(mapped.costPrice) || null;
+  if (mapped.price !== undefined) mapped.price = parseFloat(mapped.price) || null;
 
   if (mapped.expiryDate && mapped.expiryDate !== "") {
     const d = new Date(mapped.expiryDate);
@@ -152,7 +152,7 @@ function mapRowToInventory(row, sheetUrl, overrideBranch, userId) {
     branch,
     userId: userId || null,
     sourceSheetUrl: sheetUrl,
-    lastSyncedAt:   new Date(),
+    lastSyncedAt: new Date(),
     extraFields,
   };
 }
@@ -188,9 +188,9 @@ async function runAnalysis(items, userPhone = null) {
   }
 
   return {
-    alerts:          alerts.length,
+    alerts: alerts.length,
     recommendations: recommendations.length,
-    aiEnabled:       aiEngine.isAvailable(),
+    aiEnabled: aiEngine.isAvailable(),
   };
 }
 
@@ -254,7 +254,7 @@ async function restartAllPollers() {
 
 async function syncSheet(sheetUrl, branch, userId, userPhone) {
   const { sheetId } = parseSheetUrl(sheetUrl);
-  const extracted   = await extractSheetData(sheetUrl);
+  const extracted = await extractSheetData(sheetUrl);
 
   const isMultiTab = extracted.sheets.length > 1;
   const upsertedItems = [];
@@ -278,8 +278,8 @@ async function syncSheet(sheetUrl, branch, userId, userPhone) {
       const item = await InventoryItem.findOneAndUpdate(
         {
           productId: mapped.productId,
-          branch:    itemBranch,
-          userId:    userId || null,
+          branch: itemBranch,
+          userId: userId || null,
         },
         { $set: { ...mapped, branch: itemBranch } },
         { upsert: true, returnDocument: "after" }
@@ -317,10 +317,10 @@ async function syncSheet(sheetUrl, branch, userId, userPhone) {
   return {
     sheetId,
     totalRows,
-    itemsUpserted:   upsertedItems.length,
-    items:           upsertedItems,
+    itemsUpserted: upsertedItems.length,
+    items: upsertedItems,
     isMultiTab,
-    branches:        branchSummary,
+    branches: branchSummary,
     ...analysis,
   };
 }
@@ -338,7 +338,7 @@ router.post("/sync-sheet", dbGuard, optionalAuth, async (req, res) => {
   if (!sheetUrl || !sheetUrl.includes("docs.google.com/spreadsheets")) {
     return res.status(400).json({
       success: false,
-      error:   "Provide a valid Google Sheets URL in the 'sheetUrl' body field.",
+      error: "Provide a valid Google Sheets URL in the 'sheetUrl' body field.",
     });
   }
 
@@ -501,7 +501,7 @@ router.post("/run-analysis", dbGuard, optionalAuth, async (req, res) => {
     const analysis = await runAnalysis(items, userPhone);
 
     return res.status(200).json({
-      success:     true,
+      success: true,
       itemsScanned: items.length,
       ...analysis,
     });
@@ -518,10 +518,10 @@ router.get("/inventory", dbGuard, optionalAuth, async (req, res) => {
   try {
     const {
       branch, category, search,
-      page  = 1,
+      page = 1,
       limit = 100,
       sortBy = "name",
-      order  = "asc",
+      order = "asc",
     } = req.query;
 
     const filter = {};
@@ -535,7 +535,7 @@ router.get("/inventory", dbGuard, optionalAuth, async (req, res) => {
     if (search) filter.$text = { $search: search };
 
     const sortOrder = order === "desc" ? -1 : 1;
-    const skip      = (Math.max(1, Number(page)) - 1) * Math.min(100, Number(limit));
+    const skip = (Math.max(1, Number(page)) - 1) * Math.min(100, Number(limit));
 
     const [items, total] = await Promise.all([
       InventoryItem.find(filter)
@@ -549,8 +549,8 @@ router.get("/inventory", dbGuard, optionalAuth, async (req, res) => {
     return res.status(200).json({
       success: true,
       total,
-      page:    Number(page),
-      pages:   Math.ceil(total / Number(limit)),
+      page: Number(page),
+      pages: Math.ceil(total / Number(limit)),
       items,
     });
   } catch (err) {
@@ -658,9 +658,9 @@ router.get("/inventory/summary", dbGuard, optionalAuth, async (req, res) => {
     // Last synced
     const lastSynced = items.length > 0
       ? items.reduce((latest, i) => {
-          const t = new Date(i.lastSyncedAt || i.updatedAt);
-          return t > latest ? t : latest;
-        }, new Date(0))
+        const t = new Date(i.lastSyncedAt || i.updatedAt);
+        return t > latest ? t : latest;
+      }, new Date(0))
       : null;
 
     return res.status(200).json({
@@ -746,7 +746,7 @@ router.get("/alerts", dbGuard, optionalAuth, async (req, res) => {
   try {
     const {
       type, resolved = "false",
-      page  = 1,
+      page = 1,
       limit = 50,
     } = req.query;
 
@@ -775,8 +775,8 @@ router.get("/alerts", dbGuard, optionalAuth, async (req, res) => {
     return res.status(200).json({
       success: true,
       total,
-      page:    Number(page),
-      pages:   Math.ceil(total / Number(limit)),
+      page: Number(page),
+      pages: Math.ceil(total / Number(limit)),
       summary,
       alerts,
     });
@@ -792,13 +792,13 @@ router.get("/recommendations", dbGuard, optionalAuth, async (req, res) => {
   try {
     const {
       type, priority,
-      page  = 1,
+      page = 1,
       limit = 50,
     } = req.query;
 
     const filter = {};
     if (req.userId) filter.userId = req.userId;
-    if (type)     filter.type     = type;
+    if (type) filter.type = type;
     if (priority) filter.priority = priority;
 
     const skip = (Math.max(1, Number(page)) - 1) * Math.min(100, Number(limit));
@@ -816,7 +816,7 @@ router.get("/recommendations", dbGuard, optionalAuth, async (req, res) => {
       success: true,
       aiEnabled: aiEngine.isAvailable(),
       total,
-      page:  Number(page),
+      page: Number(page),
       pages: Math.ceil(total / Number(limit)),
       recommendations: recs,
     });
@@ -889,10 +889,10 @@ router.post("/inventory/restock-order", dbGuard, optionalAuth, async (req, res) 
     ].join("\n");
 
     // Optional: WHATSAPP_RESTOCK_TO forces *all* restock WhatsApps to this number (demo / ops).
-    // Otherwise: profile distributor → logged-in user phone → WHATSAPP_RESTOCK_FALLBACK (+917889500877).
+    // Otherwise: profile distributor → logged-in user phone → WHATSAPP_RESTOCK_FALLBACK 
     const forced = (process.env.WHATSAPP_RESTOCK_TO || "").trim();
     const fallback =
-      (process.env.WHATSAPP_RESTOCK_FALLBACK || "").trim() || "+917889500877";
+      (process.env.WHATSAPP_RESTOCK_FALLBACK || "").trim() || "Testing";
     const sendTo = forced || distPhone || userPhone || fallback;
     const result = await whatsappEngine.sendAndLog({
       userId,
@@ -1103,8 +1103,8 @@ router.get("/health", async (req, res) => {
 
   return res.status(dbState === 1 ? 200 : 503).json({
     success: dbState === 1,
-    status:  dbState === 1 ? "ok" : "degraded",
-    db:      dbStatus,
+    status: dbState === 1 ? "ok" : "degraded",
+    db: dbStatus,
     aiEnabled: aiEngine.isAvailable(),
     whatsappEnabled: whatsappEngine.isAvailable(),
     activePollers: activePollers.size,
